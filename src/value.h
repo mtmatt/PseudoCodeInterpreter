@@ -111,6 +111,22 @@ public:
     std::shared_ptr<Value>& back() { return value.back();};
     std::string repr() override { return get_num();}
 
+    void resize(int new_size) {
+        if (new_size < 0) {
+            // Or handle error appropriately, for now, do nothing.
+            return;
+        }
+        if (static_cast<size_t>(new_size) < value.size()) {
+            value.resize(new_size);
+        } else if (static_cast<size_t>(new_size) > value.size()) {
+            size_t old_size = value.size();
+            value.resize(new_size);
+            for (size_t i = old_size; i < static_cast<size_t>(new_size); ++i) {
+                value[i] = std::make_shared<Value>(); // Fill with default Value
+            }
+        }
+    }
+
     std::shared_ptr<Value> sz, error;
 protected:
     ValueList value;
