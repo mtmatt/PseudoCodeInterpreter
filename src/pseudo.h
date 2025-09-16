@@ -20,6 +20,6 @@
 /// Run
 /// --------------------
 
-std::string Run(std::string, std::string, SymbolTable&);
+std::string run(std::string, std::string, SymbolTable&);
 
 #endif

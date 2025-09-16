@@ -379,7 +379,7 @@ std::shared_ptr<Value> pow(std::shared_ptr<Value> a, std::shared_ptr<Value> b) {
 /// Run
 /// --------------------
 
-std::string Run(std::string file_name, std::string text, SymbolTable &global_symbol_table) {
+std::string run(std::string file_name, std::string text, SymbolTable &global_symbol_table) {
     Lexer lexer(file_name, text);
     TokenList tokens = lexer.make_tokens();
     if(tokens.empty()) return "";
