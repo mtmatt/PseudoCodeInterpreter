@@ -133,9 +133,9 @@ std::shared_ptr<Value> Interpreter::visit_array_assign(std::shared_ptr<Node> nod
 }
 
 std::shared_ptr<Value> Interpreter::visit_member_access(std::shared_ptr<Node> node) {
-    NodeList chlid{node->get_child()};
-    std::shared_ptr<Value> obj{visit(chlid[0])};
-    std::shared_ptr<Node> &member{chlid[1]};
+    NodeList child{node->get_child()};
+    std::shared_ptr<Value> obj{visit(child[0])};
+    std::shared_ptr<Node> &member{child[1]};
 
     if(obj->get_type() == VALUE_ARRAY) {
         std::string member_name = member->get_name();
