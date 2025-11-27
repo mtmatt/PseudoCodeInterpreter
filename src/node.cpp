@@ -167,3 +167,11 @@ std::string ArrayAssignNode::get_node() {
     std::getline(ss, ret);
     return ret;
 }
+
+std::string MemberAccessNode::get_node() {
+    std::stringstream ss;
+    ss << obj->get_node() << "." << member->get_node();
+    std::string ret;
+    std::getline(ss, ret);
+    return ret;
+}

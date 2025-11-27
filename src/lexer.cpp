@@ -65,6 +65,7 @@ TokenList Lexer::make_tokens() {
             
             case '+': case '-': case '*': case '/': case '%': case '^': case '(': case ')':
             case '=': case ',': case ':': case '{': case '}': case '[': case ']': case ';':
+            case '.':
             tokens.push_back(std::make_shared<Token>(TO_TOKEN_TYPE.at(current_char), pos));
             advance(); break;
             case '<':

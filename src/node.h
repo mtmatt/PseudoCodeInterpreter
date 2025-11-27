@@ -26,6 +26,7 @@ const std::string NODE_ALGOCALL("CALL");
 const std::string NODE_ARRAY("ARRAY");
 const std::string NODE_ARRACCESS("ARRACCESS");
 const std::string NODE_ARRASSIGN("ARRASSIGN");
+const std::string NODE_MEMACCESS("MEMACCESS");
 const std::string TAB{"    "};
 
 class Node {
@@ -36,7 +37,7 @@ public:
     virtual std::string get_type() {return "NONE";}
     virtual std::shared_ptr<Token> get_tok() { return nullptr;}
     virtual TokenList get_toks() { return TokenList(0);}
-    virtual std::string get_name() {return "";}
+    virtual std::string get_name() { return "";}
 };
 
 using NodeList = std::vector<std::shared_ptr<Node>>;
@@ -97,7 +98,7 @@ public:
     NodeList get_child() override { return NodeList{node};}
     std::string get_type() override { return NODE_VARASSIGN;}
     std::shared_ptr<Token> get_tok() override { return nullptr;}
-    std::string get_name() override {return name;}
+    std::string get_name() override { return name;}
 protected:
     std::string name;
     std::shared_ptr<Node> node;
@@ -257,6 +258,18 @@ public:
     std::shared_ptr<Token> get_tok() override { return nullptr;}
 protected:
     std::shared_ptr<Node> arr, value;
+};
+
+class MemberAccessNode: public Node {
+public:
+    MemberAccessNode(std::shared_ptr<Node> _obj, std::shared_ptr<Node> _member)
+        : obj(_obj), member(_member) {}
+    std::string get_node() override;
+    NodeList get_child() override { return NodeList{obj, member};}
+    std::string get_type() override { return NODE_MEMACCESS;}
+    std::shared_ptr<Token> get_tok() override { return nullptr;}
+protected:
+    std::shared_ptr<Node> obj, member;
 };
 
 #endif
