@@ -2,6 +2,7 @@
 #include "pseudo.h"
 #include "node.h"
 #include "color.h"
+#include "interpreter.h"
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -73,9 +74,10 @@ void ArrayValue::push_back(std::shared_ptr<Value> new_value) {
 
 std::shared_ptr<Value> ArrayValue::pop_back() {
     if(value.empty())
-        return std::make_shared<ErrorValue>(VALUE_ERROR, "Pop a empty array");
+        return std::make_shared<ErrorValue>(VALUE_ERROR, "Pop an empty array");
+    std::shared_ptr<Value> ret = value.back();
     value.pop_back();
-    return value.back();
+    return ret;
 }
 
 std::shared_ptr<Value>& ArrayValue::operator[](int p) {
@@ -143,6 +145,66 @@ std::shared_ptr<Value> BuiltinAlgoValue::execute(NodeList args, SymbolTable *par
         return execute_string(sym.get(args_name[0]->get_value())->get_num());
     }
     return ret;
+}
+
+std::shared_ptr<Value> BoundMethodValue::execute(NodeList args, SymbolTable *parent) {
+    if (obj->get_type() == VALUE_ARRAY) {
+        ArrayValue *arr_obj = dynamic_cast<ArrayValue*>(obj.get());
+        SymbolTable sym(parent);
+        Interpreter interpreter(sym);
+
+        if (method_name == "push" || method_name == "push_back") {
+            if (args.size() != 1) {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Expect one argument for " + method_name + "\n");
+            }
+            std::shared_ptr<Value> arg = interpreter.visit(args[0]);
+            if (arg->get_type() == VALUE_ERROR) return arg;
+            arr_obj->push_back(arg);
+            return arr_obj->back();
+        } else if (method_name == "pop" || method_name == "pop_back") {
+            if (!args.empty()) {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Expect zero argument for " + method_name + "\n");
+            }
+            if (arr_obj->size()->get_num() == "0") {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Cannot " + method_name + " from an empty array\n");
+            }
+            return arr_obj->pop_back();
+        } else if (method_name == "resize") {
+            if (args.size() != 1) {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Expect one argument for resize\n");
+            }
+            std::shared_ptr<Value> new_size_val = interpreter.visit(args[0]);
+            if (new_size_val->get_type() == VALUE_ERROR) return new_size_val;
+            if (new_size_val->get_type() != VALUE_INT) {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Argument for resize must be an integer\n");
+            }
+            long long new_size;
+            try {
+                new_size = std::stoll(new_size_val->get_num());
+            } catch (const std::out_of_range& oor) {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Resize argument out of range\n");
+            }
+            if (new_size < 0) {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Resize argument cannot be negative\n");
+            }
+            arr_obj->resize(static_cast<int>(new_size));
+            return obj;
+        } else if (method_name == "size") {
+            if (!args.empty()) {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Expect zero argument for size\n");
+            }
+            return arr_obj->size();
+        } else if (method_name == "back") {
+            if (!args.empty()) {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Expect zero arguments for back\n");
+            }
+            if (arr_obj->size()->get_num() == "0") {
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Cannot call back on an empty array\n");
+            }
+            return arr_obj->back();
+        }
+    }
+    return std::make_shared<ErrorValue>(VALUE_ERROR, "Unknown member or invalid object for " + method_name + "\n");
 }
 
 std::shared_ptr<Value> BuiltinAlgoValue::execute_print(const std::string &str) {

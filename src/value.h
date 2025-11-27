@@ -99,6 +99,18 @@ public:
 protected:
 };
 
+class BoundMethodValue : public Value {
+public:
+    BoundMethodValue(std::shared_ptr<Value> _obj, std::string _method_name)
+        : Value(VALUE_ALGO), obj(_obj), method_name(_method_name) {}
+    std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr) override;
+    std::string get_num() override { return method_name; }
+    std::string repr() override { return "<Bound Method " + method_name + ">"; }
+protected:
+    std::shared_ptr<Value> obj;
+    std::string method_name;
+};
+
 class ArrayValue: public Value {
 public:
     ArrayValue(ValueList _value) 
@@ -113,7 +125,6 @@ public:
 
     void resize(int new_size) {
         if (new_size < 0) {
-            // Or handle error appropriately, for now, do nothing.
             return;
         }
         if (static_cast<size_t>(new_size) < value.size()) {
