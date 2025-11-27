@@ -196,7 +196,7 @@ std::shared_ptr<Value> BoundMethodValue::execute(NodeList args, SymbolTable *par
             return arr_obj->size();
         } else if (method_name == "back") {
             if (!args.empty()) {
-                return std::make_shared<ErrorValue>(VALUE_ERROR, "Expect zero argument for back\n");
+                return std::make_shared<ErrorValue>(VALUE_ERROR, "Expect zero arguments for back\n");
             }
             if (arr_obj->size()->get_num() == "0") {
                 return std::make_shared<ErrorValue>(VALUE_ERROR, "Cannot call back on an empty array\n");
