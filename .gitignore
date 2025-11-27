@@ -30,3 +30,5 @@
 *.exe
 *.out
 *.app
+shell
+test_inheritance

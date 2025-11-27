@@ -132,82 +132,14 @@ std::shared_ptr<Value> Interpreter::visit_array_assign(std::shared_ptr<Node> nod
     return arr = value;
 }
 
-std::shared_ptr<Value>& Interpreter::visit_member_access(std::shared_ptr<Node> node) {
+std::shared_ptr<Value> Interpreter::visit_member_access(std::shared_ptr<Node> node) {
     NodeList chlid{node->get_child()};
     std::shared_ptr<Value> obj{visit(chlid[0])};
     std::shared_ptr<Node> &member{chlid[1]};
-    if(member->get_type() != NODE_VARACCESS && member->get_type() != NODE_ALGOCALL) {
-        error = std::make_shared<ErrorValue>(VALUE_ERROR, "Expect one argument for push_back\n");
-        return error;
-    }
-    if(obj->get_type() == VALUE_ARRAY) {
-        ArrayValue *arr_obj = dynamic_cast<ArrayValue*>(obj.get());
-        std::string member_name = member->get_name();
 
-        if(member_name == "push_back" || member_name == "push") {
-            if(member->get_child().size() != 1) {
-                error = std::make_shared<ErrorValue>(VALUE_ERROR, "Expect one argument for " + member_name + "\n");
-                return error;
-            }
-            std::shared_ptr<Value> arg{visit(member->get_child()[0])};
-            if(arg->get_type() == VALUE_ERROR) return arg;
-            arr_obj->push_back(arg);
-            return arr_obj->back();
-        }
-        if(member_name == "pop_back" || member_name == "pop") {
-            if(!member->get_child().empty()) {
-                 error = std::make_shared<ErrorValue>(VALUE_ERROR, "Expect zero argument for " + member_name + "\n");
-                return error;
-            }
-            if (arr_obj->size()->get_num() == "0") { // Check if array is empty
-                error = std::make_shared<ErrorValue>(VALUE_ERROR, "Cannot " + member_name + " from an empty array\n");
-                return error;
-            }
-            return arr_obj->pop_back();
-        }
-        if(member_name == "resize") {
-            if(member->get_child().size() != 1) {
-                error = std::make_shared<ErrorValue>(VALUE_ERROR, "Expect one argument for resize\n");
-                return error;
-            }
-            std::shared_ptr<Value> new_size_val{visit(member->get_child()[0])};
-            if(new_size_val->get_type() == VALUE_ERROR) return new_size_val;
-            if(new_size_val->get_type() != VALUE_INT) {
-                error = std::make_shared<ErrorValue>(VALUE_ERROR, "Argument for resize must be an integer\n");
-                return error;
-            }
-            long long new_size;
-            try {
-                new_size = std::stoll(new_size_val->get_num());
-            } catch (const std::out_of_range& oor) {
-                error = std::make_shared<ErrorValue>(VALUE_ERROR, "Resize argument out of range\n");
-                return error;
-            }
-            if (new_size < 0) {
-                error = std::make_shared<ErrorValue>(VALUE_ERROR, "Resize argument cannot be negative\n");
-                return error;
-            }
-            arr_obj->resize(static_cast<int>(new_size));
-            return obj; // Return the modified array object
-        }
-        if(member_name == "size") {
-            if(!member->get_child().empty()) {
-                error = std::make_shared<ErrorValue>(VALUE_ERROR, "Expect zero argument for size\n");
-                return error;
-            }
-            return arr_obj->size();
-        }
-        if(member_name == "back") {
-            if(!member->get_child().empty()) {
-                error = std::make_shared<ErrorValue>(VALUE_ERROR, "Expect zero argument for back\n");
-                return error;
-            }
-            if (arr_obj->size()->get_num() == "0") { // Check if array is empty
-                error = std::make_shared<ErrorValue>(VALUE_ERROR, "Cannot call back on an empty array\n");
-                return error;
-            }
-            return arr_obj->back();
-        }
+    if(obj->get_type() == VALUE_ARRAY) {
+        std::string member_name = member->get_name();
+        return std::make_shared<BoundMethodValue>(obj, member_name);
     }
     error = std::make_shared<ErrorValue>(VALUE_ERROR, obj->get_num() + " has no member " + member->get_name() + "\n");
     return error;
