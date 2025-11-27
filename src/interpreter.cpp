@@ -52,6 +52,9 @@ std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
     if(node->get_type() == NODE_ARRASSIGN) {
         return visit_array_assign(node);
     }
+    if(node->get_type() == NODE_MEMACCESS) {
+        return visit_member_access(node);
+    }
     return std::make_shared<ErrorValue>(VALUE_ERROR, "Fail to get result\n");
 }
 
@@ -128,6 +131,19 @@ std::shared_ptr<Value> Interpreter::visit_array_assign(std::shared_ptr<Node> nod
     std::shared_ptr<Value> &arr{visit_array_access(child[0])}, value{visit(child[1])};
     return arr = value;
 }
+
+std::shared_ptr<Value> Interpreter::visit_member_access(std::shared_ptr<Node> node) {
+    NodeList child{node->get_child()};
+    std::shared_ptr<Value> obj{visit(child[0])};
+    std::shared_ptr<Node> &member{child[1]};
+
+    if(obj->get_type() == VALUE_ARRAY) {
+        std::string member_name = member->get_name();
+        return std::make_shared<BoundMethodValue>(obj, member_name);
+    }
+    error = std::make_shared<ErrorValue>(VALUE_ERROR, obj->get_num() + " has no member " + member->get_name() + "\n");
+    return error;
+} 
 
 std::shared_ptr<Value> Interpreter::visit_if(std::shared_ptr<Node> node) {
     IfNode* if_node = dynamic_cast<IfNode*>(node.get());

@@ -99,6 +99,18 @@ public:
 protected:
 };
 
+class BoundMethodValue : public Value {
+public:
+    BoundMethodValue(std::shared_ptr<Value> _obj, std::string _method_name)
+        : Value(VALUE_ALGO), obj(_obj), method_name(_method_name) {}
+    std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr) override;
+    std::string get_num() override { return method_name; }
+    std::string repr() override { return "<Bound Method " + method_name + ">"; }
+protected:
+    std::shared_ptr<Value> obj;
+    std::string method_name;
+};
+
 class ArrayValue: public Value {
 public:
     ArrayValue(ValueList _value) 
@@ -107,12 +119,28 @@ public:
     std::shared_ptr<Value>& operator[](int p);
     void push_back(std::shared_ptr<Value>);
     std::shared_ptr<Value> pop_back();
+    std::shared_ptr<Value>& size() { return sz = std::make_shared<TypedValue<int64_t>>(VALUE_INT, value.size());};
     std::shared_ptr<Value>& back() { return value.back();};
     std::string repr() override { return get_num();}
 
+    void resize(int new_size) {
+        if (new_size < 0) {
+            return;
+        }
+        if (static_cast<size_t>(new_size) < value.size()) {
+            value.resize(new_size);
+        } else if (static_cast<size_t>(new_size) > value.size()) {
+            size_t old_size = value.size();
+            value.resize(new_size);
+            for (size_t i = old_size; i < static_cast<size_t>(new_size); ++i) {
+                value[i] = std::make_shared<Value>(); // Fill with default Value
+            }
+        }
+    }
+
+    std::shared_ptr<Value> sz, error;
 protected:
     ValueList value;
-    std::shared_ptr<Value> error;
 };
 
 std::shared_ptr<Value> operator+(std::shared_ptr<Value>, std::shared_ptr<Value>);

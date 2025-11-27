@@ -1,0 +1,98 @@
+print("--- Starting Array Method Tests ---")
+
+// --- PUSH Tests ---
+print("")
+print("--- Testing PUSH ---")
+arr <- []
+print("Initial empty array:", arr)
+print("Initial size:", arr.size())
+
+arr.push(10)
+print("After push(10):", arr)
+print("Size after push(10):", arr.size())
+
+arr.push("hello")
+print("After push('hello'):", arr)
+print("Size after push('hello'):", arr.size())
+
+arr.push(20.5)
+print("After push(20.5):", arr)
+print("Size after push(20.5):", arr.size())
+// Expected: [10, "hello", 20.5], Size: 3
+
+print("")
+print("--- Testing POP ---")
+// arr is currently [10, "hello", 20.5]
+print("Initial array for pop:", arr)
+print("Initial size for pop:", arr.size())
+
+popped_val <- arr.pop()
+print("Popped value 1:", popped_val) // Expected: 20.5
+print("Array after pop 1:", arr)      // Expected: [10, "hello"]
+print("Size after pop 1:", arr.size()) // Expected: 2
+
+popped_val <- arr.pop()
+print("Popped value 2:", popped_val) // Expected: "hello"
+print("Array after pop 2:", arr)      // Expected: [10]
+print("Size after pop 2:", arr.size()) // Expected: 1
+
+popped_val <- arr.pop()
+print("Popped value 3:", popped_val) // Expected: 10
+print("Array after pop 3:", arr)      // Expected: []
+print("Size after pop 3:", arr.size()) // Expected: 0
+
+print("Attempting to pop from empty array...")
+popped_val <- arr.pop() // Should print an error or return NONE/ERROR
+print("Popped value from empty (should be error/NONE):", popped_val)
+print("Array after pop from empty:", arr)
+print("Size after pop from empty:", arr.size())
+
+print("")
+print("--- Testing RESIZE ---")
+arr2 <- []
+print("Initial empty array for resize:", arr2)
+print("Initial size for resize:", arr2.size())
+
+arr2.resize(3)
+print("After resize(3) on empty array:", arr2) // Expected: [NONE, NONE, NONE]
+print("Size after resize(3):", arr2.size())    // Expected: 3
+
+arr2.push(100) // arr2 is now [NONE, NONE, NONE, 100] - this is how current push works with pre-sized arrays.
+// Lets reset for clearer resize tests.
+arr2 <- [1, 2, 3, 4, 5]
+print("New array for resize tests:", arr2) // Expected: [1, 2, 3, 4, 5]
+print("Size:", arr2.size())               // Expected: 5
+
+arr2.resize(2)
+print("After resize(2):", arr2) // Expected: [1, 2]
+print("Size after resize(2):", arr2.size()) // Expected: 2
+
+arr2.resize(4)
+print("After resize(4):", arr2) // Expected: [1, 2, NONE, NONE]
+print("Size after resize(4):", arr2.size()) // Expected: 4
+
+arr2.resize(4)
+print("After resize(4) again (same size):", arr2) // Expected: [1, 2, NONE, NONE]
+print("Size after resize(4) again:", arr2.size()) // Expected: 4
+
+arr2.resize(0)
+print("After resize(0):", arr2) // Expected: []
+print("Size after resize(0):", arr2.size()) // Expected: 0
+
+arr2.resize(2)
+print("After resize(2) on now empty array:", arr2) // Expected: [NONE, NONE]
+print("Size after resize(2):", arr2.size())    // Expected: 2
+
+print("Attempting resize with negative value (-1)...")
+arr2.resize(-1) // Should print an error
+print("Array after resize(-1):", arr2) // Expected: [NONE, NONE] (no change or error shown by print)
+print("Size after resize(-1):", arr2.size()) // Expected: 2
+
+print("Attempting resize with non-integer value ('abc')...")
+arr2.resize("abc") // Should print an error
+print("Array after resize('abc'):", arr2) // Expected: [NONE, NONE] (no change or error shown by print)
+print("Size after resize('abc'):", arr2.size()) // Expected: 2
+
+
+print("")
+print("--- Array Method Tests Complete ---")

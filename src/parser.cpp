@@ -8,6 +8,7 @@
 #include "node.h"
 #include "token.h"
 #include <iostream>
+#include <memory>
 #include <string>
 #include <algorithm>
 
@@ -31,7 +32,7 @@ std::shared_ptr<Token> Parser::back() {
 
 std::shared_ptr<Node> Parser::atom(int tab_expect) {
     std::shared_ptr<Token> tok = current_tok;
-    std::string error_msg{"Not a atom, found \""};
+    std::string error_msg{"Not an atom, found \""};
     if(tok->isnumber()) {
         advance();
         return std::make_shared<ValueNode>(tok);
@@ -338,6 +339,11 @@ std::shared_ptr<Node> Parser::pow(int tab_expect) {
 std::shared_ptr<Node> Parser::call(int tab_expect) {
     std::shared_ptr<Node> at{atom(tab_expect)};
     if(at->get_type() == NODE_ERROR) return at;
+    if(current_tok->get_type() == TOKEN_DOT) {
+        advance();
+        std::shared_ptr<Node> member{atom(tab_expect)};
+        at = std::make_shared<MemberAccessNode>(at, member);
+    }
     if(current_tok->get_type() != TOKEN_LEFT_PAREN && current_tok->get_type() != TOKEN_LEFT_SQUARE) {
         return at;
     }
