@@ -74,7 +74,7 @@ void ArrayValue::push_back(std::shared_ptr<Value> new_value) {
 
 std::shared_ptr<Value> ArrayValue::pop_back() {
     if(value.empty())
-        return std::make_shared<ErrorValue>(VALUE_ERROR, "Pop a empty array");
+        return std::make_shared<ErrorValue>(VALUE_ERROR, "Pop an empty array");
     std::shared_ptr<Value> ret = value.back();
     value.pop_back();
     return ret;
