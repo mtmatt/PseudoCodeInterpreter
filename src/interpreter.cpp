@@ -289,6 +289,24 @@ std::shared_ptr<Value> Interpreter::visit_repeat(std::shared_ptr<Node> node) {
 std::shared_ptr<Value> Interpreter::visit_algo_def(std::shared_ptr<Node> node) {
     std::string algo_name = node->get_name();
     std::shared_ptr<Value> value = std::make_shared<AlgoValue>(algo_name, node);
+    
+    size_t pos = algo_name.find("::");
+    if (pos != std::string::npos) {
+        std::string struct_name = algo_name.substr(0, pos);
+        std::string method_name = algo_name.substr(pos + 2);
+        
+        std::shared_ptr<Value> struct_val = symbol_table.get(struct_name);
+        if (struct_val->get_type() == VALUE_STRUCT) {
+            StructValue* s = dynamic_cast<StructValue*>(struct_val.get());
+            // We create a new AlgoValue with the short name for the method map
+            // so that when it executes, it might have the correct name context if needed.
+            // But actually, the AlgoValue holds the AST node.
+            // The AST node has the full name.
+            // It should be fine.
+            s->methods[method_name] = value;
+        }
+    }
+
     symbol_table.set(algo_name, value);
     return symbol_table.get(algo_name);
 }
