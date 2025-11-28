@@ -53,7 +53,7 @@ std::shared_ptr<Node> Parser::atom(int tab_expect) {
             advance();
             return e;
         }
-        error_msg += "Expected \')\'" RESET "\n";
+        error_msg += "Expected \')\'";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     } else if(tok->get_type() == TOKEN_IDENTIFIER) {
@@ -99,7 +99,7 @@ std::shared_ptr<Node> Parser::atom(int tab_expect) {
         return std::make_shared<ReturnNode>(ret_val);
     }
 
-    error_msg += "\"" RESET "\n" ;
+    error_msg += "\"";
     std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
     return std::make_shared<ErrorNode>(error_token);
 }
@@ -166,7 +166,7 @@ std::shared_ptr<Node> Parser::array_expr(int tab_expect) {
         if(ret.back()->get_type() == NODE_ERROR) return ret.back();
     }
     if(current_tok->get_type() != TOKEN_RIGHT_BRACE) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected a \"}\"\n" RESET;
+        std::string error_msg = "Expected a \"}\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -178,7 +178,7 @@ std::shared_ptr<Node> Parser::if_expr(int tab_expect) {
     std::shared_ptr<Node> condition = expr(tab_expect);
     if(condition->get_type() == NODE_ERROR) return condition;
     if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "then")) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected \"then\"\n" RESET;
+        std::string error_msg = "Expected \"then\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -226,13 +226,13 @@ std::shared_ptr<Node> Parser::if_expr(int tab_expect) {
 std::shared_ptr<Node> Parser::for_expr(int tab_expect) {
     std::shared_ptr<Token> var_name = current_tok;
     if(current_tok->get_type() != TOKEN_IDENTIFIER) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected \"an identifier\"\n" RESET;
+        std::string error_msg = "Expected \"an identifier\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
     advance();
     if(current_tok->get_type() != TOKEN_ASSIGN) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected \"<-\"\n" RESET;
+        std::string error_msg = "Expected \"<-\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -242,7 +242,7 @@ std::shared_ptr<Node> Parser::for_expr(int tab_expect) {
     std::shared_ptr<Node> var_assign = std::make_shared<VarAssignNode>(var_name->get_value(), start_value);
     
     if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "to")) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected \"to\"\n" RESET;
+        std::string error_msg = "Expected \"to\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -257,7 +257,7 @@ std::shared_ptr<Node> Parser::for_expr(int tab_expect) {
         if(step_value->get_type() == NODE_ERROR) return step_value;
     }
     if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "do")) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected \"do\"\n" RESET;
+        std::string error_msg = "Expected \"do\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -272,7 +272,7 @@ std::shared_ptr<Node> Parser::while_expr(int tab_expect) {
     std::shared_ptr<Node> condition = expr(tab_expect);
     if(condition->get_type() == NODE_ERROR) return condition;
     if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "do")) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected \"do\"\n" RESET;
+        std::string error_msg = "Expected \"do\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -288,7 +288,7 @@ std::shared_ptr<Node> Parser::repeat_expr(int tab_expect) {
     for(auto node : body_node)
         if(node->get_type() == NODE_ERROR) return node;
     if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "until")) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected \"until\"\n" RESET;
+        std::string error_msg = "Expected \"until\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -306,7 +306,7 @@ std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
              std::shared_ptr<Token> struct_name = algo_name;
              advance();
              if (current_tok->get_type() != TOKEN_IDENTIFIER && current_tok->get_type() != TOKEN_KEYWORD) {
-                  std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected method name after ::\n" RESET;
+                  std::string error_msg = "Expected method name after ::";
                   std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
                   return std::make_shared<ErrorNode>(error_token);
              }
@@ -361,7 +361,7 @@ std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
              algo_name = current_tok;
              advance();
         } else if (current_tok->get_type() != TOKEN_LEFT_PAREN) {
-            std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected a \"(\"\n" RESET;
+            std::string error_msg = "Expected a \"(\"";
             std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
             return std::make_shared<ErrorNode>(error_token);
         }
@@ -390,7 +390,7 @@ std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
     } else if(current_tok->get_type() != TOKEN_LEFT_PAREN) {
         algo_name = std::make_shared<TypedToken<std::string>>(TOKEN_IDENTIFIER, current_tok->get_pos(), "Anonymous");
     } else {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected an \"identifier\" or \"(\"\n" RESET;
+        std::string error_msg = "Expected an \"identifier\" or \"(\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -402,7 +402,7 @@ std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
         while(current_tok->get_type() == TOKEN_COMMA) {
             advance();
             if(current_tok->get_type() != TOKEN_IDENTIFIER) {
-                std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected an \"identifier\" or a \"(\"\n" RESET;
+                std::string error_msg = "Expected an \"identifier\" or a \"(\"";
                 std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
                 return std::make_shared<ErrorNode>(error_token);
             }
@@ -412,13 +412,13 @@ std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
     }
 
     if(current_tok->get_type() != TOKEN_RIGHT_PAREN) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected a \")\"\n" RESET;
+        std::string error_msg = "Expected a \")\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
     advance();
     if(current_tok->get_type() != TOKEN_COLON) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected a \":\"\n" RESET;
+        std::string error_msg = "Expected a \":\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -442,7 +442,7 @@ std::shared_ptr<Node> Parser::call(int tab_expect) {
     while(current_tok->get_type() == TOKEN_DOT) {
         advance();
         if(current_tok->get_type() != TOKEN_IDENTIFIER) {
-             std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected an identifier after \".\"\n" RESET;
+             std::string error_msg = "Expected an identifier after \".\"";
              std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
              return std::make_shared<ErrorNode>(error_token);
         }
@@ -477,7 +477,7 @@ std::shared_ptr<Node> Parser::call(int tab_expect) {
                     if(args.back()->get_type() == NODE_ERROR) return args.back();
                 }
                 if(current_tok->get_type() != TOKEN_RIGHT_PAREN) {
-                    std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected a \")\"\n" RESET;
+                    std::string error_msg = "Expected a \")\"";
                     std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
                     return std::make_shared<ErrorNode>(error_token);
                 }
@@ -491,7 +491,7 @@ std::shared_ptr<Node> Parser::call(int tab_expect) {
             std::shared_ptr<Node> index{expr(tab_expect)};
             if(index->get_type() == NODE_ERROR) return index;
             if(current_tok->get_type() != TOKEN_RIGHT_SQUARE) {
-                std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected a \"]\"" RESET "\n";
+                std::string error_msg = "Expected a \"]\"";
                 std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
                 return std::make_shared<ErrorNode>(error_token);
             }
@@ -573,7 +573,7 @@ NodeList Parser::statement(int tab_expect) {
                 for (int i=0; i < tab_count + 1; ++i) back();
                 return ret;
             } else if (tab_count > tab_expect) {
-                 std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected " + std::to_string(tab_expect) + " tabs" RESET "\n";
+                 std::string error_msg = "Expected " + std::to_string(tab_expect) + " tabs";
                  std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, tok->get_pos(), error_msg);
                  ret.clear();
                  ret.push_back(std::make_shared<ErrorNode>(error_token));
@@ -611,14 +611,14 @@ NodeList Parser::parse() {
 }std::shared_ptr<Node> Parser::struct_def(int tab_expect) {
     std::shared_ptr<Token> struct_name = current_tok;
     if (current_tok->get_type() != TOKEN_IDENTIFIER) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected an identifier\n" RESET;
+        std::string error_msg = "Expected an identifier";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
     advance();
 
     if (current_tok->get_type() != TOKEN_COLON) {
-        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected a \":\"\n" RESET;
+        std::string error_msg = "Expected a \":\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
     }
@@ -648,7 +648,7 @@ NodeList Parser::parse() {
         }
 
         if (tab_count > tab_expect + 1) {
-             std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected " + std::to_string(tab_expect + 1) + " tabs" RESET "\n";
+             std::string error_msg = "Expected " + std::to_string(tab_expect + 1) + " tabs";
              std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
              return std::make_shared<ErrorNode>(error_token);
         }
@@ -671,7 +671,7 @@ NodeList Parser::parse() {
              // If it's a newline, loop continues.
              // If it's something else, might be error.
              if (current_tok->get_type() != TOKEN_NEWLINE && current_tok->get_type() != TOKEN_NONE) {
-                 std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected identifier or Algorithm inside struct\n" RESET;
+                 std::string error_msg = "Expected identifier or Algorithm inside struct";
                  std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
                  return std::make_shared<ErrorNode>(error_token);
              }
