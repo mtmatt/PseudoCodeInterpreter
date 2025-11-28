@@ -12,8 +12,13 @@ Struct List:
     Algorithm set_head(h):
         self.head <- h
 
+Algorithm List::test():
+    print(self.head)
+    print(self.tail)
+
 l <- List(1, 2)
 print(l.head)
 print(l.tail)
 l.set_head(10)
 print(l.get_head())
+l.test()
