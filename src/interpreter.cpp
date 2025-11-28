@@ -58,6 +58,9 @@ std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
     if(node->get_type() == NODE_MEMACCESS) {
         return visit_member_access(node);
     }
+    if(node->get_type() == NODE_RETURN) {
+        return visit_return(node);
+    }
     return std::make_shared<ErrorValue>(VALUE_ERROR, "Fail to get result\n");
 }
 
@@ -164,7 +167,7 @@ std::shared_ptr<Value> Interpreter::visit_member_access(std::shared_ptr<Node> no
     } else if (obj->get_type() == VALUE_INSTANCE) {
         std::string member_name = member->get_name();
         InstanceValue* inst = dynamic_cast<InstanceValue*>(obj.get());
-        return inst->get_member(member_name);
+        return inst->get_member(member_name, obj);
     }
     error = std::make_shared<ErrorValue>(VALUE_ERROR, obj->get_num() + " has no member " + member->get_name() + "\n");
     return error;
@@ -179,7 +182,7 @@ std::shared_ptr<Value> Interpreter::visit_if(std::shared_ptr<Node> node) {
         std::shared_ptr<Value> ret;
         for(auto expr : if_node->get_expr()) {
             ret = visit(expr);
-            if(ret->get_type() == VALUE_ERROR) {
+            if(ret->get_type() == VALUE_ERROR || ret->get_type() == VALUE_RETURN) {
                 return ret;
             }
         }
@@ -188,7 +191,7 @@ std::shared_ptr<Value> Interpreter::visit_if(std::shared_ptr<Node> node) {
         std::shared_ptr<Value> ret;
         for(auto expr : if_node->get_else()) {
             ret = visit(expr);
-            if(ret->get_type() == VALUE_ERROR) {
+            if(ret->get_type() == VALUE_ERROR || ret->get_type() == VALUE_RETURN) {
                 return ret;
             }
         }
@@ -226,14 +229,15 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
     ValueList ret;
     while(condition(i, end_value)) {
         if(child.size() == 4) {
-            ret.push_back(visit(child[3]));
-            if(ret.back()->get_type() == VALUE_ERROR) 
-                return ret.back();
+            std::shared_ptr<Value> val = visit(child[3]);
+            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
+                return val;
+            ret.push_back(val);
         } else {
             for(int index{3}; index < child.size(); ++index) {
-                std::shared_ptr<Value> ret{visit(child[index])};
-                if(ret->get_type() == VALUE_ERROR) 
-                    return ret;
+                std::shared_ptr<Value> val{visit(child[index])};
+                if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
+                    return val;
             }
         }
         symbol_table.set(child[0]->get_name(), i + step);
@@ -249,14 +253,15 @@ std::shared_ptr<Value> Interpreter::visit_while(std::shared_ptr<Node> node) {
     ValueList ret;
     while(std::stoll(visit(child[0])->get_num()) == 1) {
         if(child.size() == 2) {
-            ret.push_back(visit(child[1]));
-            if(ret.back()->get_type() == VALUE_ERROR) 
-                return ret.back();
+            std::shared_ptr<Value> val = visit(child[1]);
+            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
+                return val;
+            ret.push_back(val);
         }
         for(int index{1}; index < child.size(); ++index) {
-            std::shared_ptr<Value> ret{visit(child[index])};
-            if(ret->get_type() == VALUE_ERROR) 
-                return ret;
+            std::shared_ptr<Value> val{visit(child[index])};
+            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
+                return val;
         }
     }
     return std::make_shared<ArrayValue>(ret);
@@ -267,14 +272,15 @@ std::shared_ptr<Value> Interpreter::visit_repeat(std::shared_ptr<Node> node) {
     ValueList ret;
     do {
         if(child.size() == 2) {
-            ret.push_back(visit(child[1]));
-            if(ret.back()->get_type() == VALUE_ERROR) 
-                return ret.back();
+            std::shared_ptr<Value> val = visit(child[1]);
+            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
+                return val;
+            ret.push_back(val);
         }
         for(int index{1}; index < child.size(); ++index) {
-            std::shared_ptr<Value> ret{visit(child[index])};
-            if(ret->get_type() == VALUE_ERROR) 
-                return ret;
+            std::shared_ptr<Value> val{visit(child[index])};
+            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
+                return val;
         }
     } while(std::stoll(visit(child[0])->get_num()) == 0);
     return std::make_shared<ArrayValue>(ret);
@@ -382,4 +388,11 @@ std::shared_ptr<Value> Interpreter::unary_op(std::shared_ptr<Value> a, std::shar
     // So `List` in symbol table should be callable.
     // StructValue needs to be callable (implement execute).
     return struct_val;
+}
+
+std::shared_ptr<Value> Interpreter::visit_return(std::shared_ptr<Node> node) {
+    ReturnNode* ret_node = dynamic_cast<ReturnNode*>(node.get());
+    std::shared_ptr<Value> val = visit(ret_node->get_child()[0]);
+    if (val->get_type() == VALUE_ERROR) return val;
+    return std::make_shared<ReturnValue>(val);
 }

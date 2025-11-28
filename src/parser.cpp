@@ -65,6 +65,9 @@ std::shared_ptr<Node> Parser::atom(int tab_expect) {
             return std::make_shared<VarAssignNode>(tok->get_value(), ret);
         }
         return std::make_shared<VarAccessNode>(tok);
+    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "self") {
+        advance();
+        return std::make_shared<VarAccessNode>(tok);
     } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "if") {
         advance();
         return if_expr(tab_expect);
@@ -86,6 +89,14 @@ std::shared_ptr<Node> Parser::atom(int tab_expect) {
     } else if(tok->get_type() == TOKEN_LEFT_BRACE) {
         advance();
         return array_expr(tab_expect);
+    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "return") {
+        advance();
+        if (current_tok->get_type() == TOKEN_NEWLINE || current_tok->get_type() == TOKEN_SEMICOLON) {
+             return std::make_shared<ReturnNode>(std::make_shared<ValueNode>(std::make_shared<Token>(TOKEN_BUILTIN_CONST, tok->get_pos()))); // Return NONE
+        }
+        std::shared_ptr<Node> ret_val = expr(tab_expect);
+        if(ret_val->get_type() == NODE_ERROR) return ret_val;
+        return std::make_shared<ReturnNode>(ret_val);
     }
 
     error_msg += "\"" RESET "\n" ;
@@ -205,9 +216,7 @@ std::shared_ptr<Node> Parser::if_expr(int tab_expect) {
             els = statement(tab_expect + 1);
         }
     } else if(has_newline) {
-        std::cout << "Before checking" << "\n";
         while(current_tok->get_type() != TOKEN_NEWLINE) {
-            std::cout << current_tok->get_type() << "\n";
             back();
         }
     }
@@ -432,7 +441,13 @@ std::shared_ptr<Node> Parser::call(int tab_expect) {
     if(at->get_type() == NODE_ERROR) return at;
     while(current_tok->get_type() == TOKEN_DOT) {
         advance();
-        std::shared_ptr<Node> member{atom(tab_expect)};
+        if(current_tok->get_type() != TOKEN_IDENTIFIER) {
+             std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected an identifier after \".\"\n" RESET;
+             std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
+             return std::make_shared<ErrorNode>(error_token);
+        }
+        std::shared_ptr<Node> member = std::make_shared<VarAccessNode>(current_tok);
+        advance();
         at = std::make_shared<MemberAccessNode>(at, member);
     }
     if(current_tok->get_type() != TOKEN_LEFT_PAREN && current_tok->get_type() != TOKEN_LEFT_SQUARE && current_tok->get_type() != TOKEN_ASSIGN) {
@@ -532,6 +547,10 @@ NodeList Parser::statement(int tab_expect) {
                 advance();
             }
 
+            if (current_tok->get_type() == TOKEN_NEWLINE) {
+                continue;
+            }
+
             if (tab_count < tab_expect) {
                 // Dedent, end of block
                 // Push back current non-tab token? No, we need to rewind to the start of this line (after newline)
@@ -561,12 +580,12 @@ NodeList Parser::statement(int tab_expect) {
                  return ret;
             }
             // Exact indentation matches tab_expect
-            if(current_tok->get_type() == TOKEN_NEWLINE) {
-                // Empty line with just tabs? or just multiple newlines?
-                // Loop again.
-                back(); // go back to NEWLINE to let loop handle it
-                break; // break inner loop, continue outer do-while
-            }
+            // if(current_tok->get_type() == TOKEN_NEWLINE) {
+            //     // Empty line with just tabs? or just multiple newlines?
+            //     // Loop again.
+            //     back(); // go back to NEWLINE to let loop handle it
+            //     break; // break inner loop, continue outer do-while
+            // }
         }
 
         while(current_tok->get_type() == TOKEN_SEMICOLON)
@@ -611,13 +630,27 @@ NodeList Parser::parse() {
     while (current_tok->get_type() == TOKEN_NEWLINE) {
         std::shared_ptr<Token> tok_newline = current_tok;
         advance();
-        for (int i = 0; i < tab_expect + 1; ++i) {
-            if (current_tok->get_type() != TOKEN_TAB) {
-                 // Indentation finished, end of struct definition
-                 while(current_tok != tok_newline) back(); // Go back to newline
-                 return std::make_shared<StructDefNode>(struct_name, members, methods);
-            }
+        
+        int tab_count = 0;
+        while(current_tok->get_type() == TOKEN_TAB) {
+            tab_count++;
             advance();
+        }
+
+        if (current_tok->get_type() == TOKEN_NEWLINE) {
+            continue;
+        }
+
+        if (tab_count < tab_expect + 1) {
+             // Indentation finished, end of struct definition
+             while(current_tok != tok_newline) back(); // Go back to newline
+             return std::make_shared<StructDefNode>(struct_name, members, methods);
+        }
+
+        if (tab_count > tab_expect + 1) {
+             std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected " + std::to_string(tab_expect + 1) + " tabs" RESET "\n";
+             std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
+             return std::make_shared<ErrorNode>(error_token);
         }
 
         // Inside struct block

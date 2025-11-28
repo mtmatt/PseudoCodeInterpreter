@@ -30,7 +30,7 @@ const std::set<std::string> KEYWORDS{
     "repeat", "until",
     "if", "then", "else", 
     "Algorithm", "continue", "break",
-    "Struct", "self", "operator"
+    "Struct", "self", "operator", "return"
 };
 
 const std::map<std::string, int64_t> BUILTIN_CONST{
