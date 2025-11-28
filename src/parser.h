@@ -31,6 +31,7 @@ public:
     std::shared_ptr<Node> atom(int tab_expect);
     std::shared_ptr<Node> call(int tab_expect);
     std::shared_ptr<Node> algo_def(int tab_expect);
+    std::shared_ptr<Node> struct_def(int tab_expect);
     NodeList statement(int tab_expect);
     
     std::shared_ptr<Node> bin_op(

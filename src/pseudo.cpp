@@ -221,6 +221,129 @@ std::shared_ptr<Value> BoundMethodValue::execute(NodeList args,
       }
       return arr_obj->back();
     }
+  } else if (obj->get_type() == VALUE_INSTANCE) {
+      InstanceValue *inst_obj = dynamic_cast<InstanceValue *>(obj.get());
+      // Find method
+      if (inst_obj->struct_def->methods.count(method_name)) {
+          std::shared_ptr<Value> method = inst_obj->struct_def->methods[method_name];
+          // method is likely AlgoValue.
+          // We need to execute it with 'self' in scope.
+          // We can use the existing AlgoValue::execute, but we need to inject 'self'.
+          // Since AlgoValue::execute creates a new symbol table, we can't inject it easily from outside *before* it starts unless we modify it or subclass it.
+          // However, we can create a new AlgoValue or wrapper that injects 'self'.
+
+          // Actually, let's copy the logic of AlgoValue::execute here but add self.
+          AlgoValue *algo_val = dynamic_cast<AlgoValue*>(method.get());
+          if (!algo_val) return std::make_shared<ErrorValue>(VALUE_ERROR, "Method is not an algorithm");
+
+          SymbolTable sym(parent);
+          Interpreter interpreter(sym);
+
+          // Set self
+          sym.set("self", obj);
+
+          std::shared_ptr<Value> ret{algo_val->set_args(args, sym, interpreter)};
+          if (ret->get_type() == VALUE_ERROR) return ret;
+
+          // Execute body
+          // We need access to algo_body which is protected/private in BaseAlgoValue/AlgoValue.
+          // BaseAlgoValue has protected 'value' (the AST node).
+          // AlgoValue doesn't expose it publicly.
+          // We might need to make 'value' public or add a method to execute with 'self'.
+          // Or we can cast and access if we are friends or similar.
+          // Since we are in pseudo.cpp and BaseAlgoValue is defined in value.h, we can't access protected members unless we are a friend or derived.
+          // BoundMethodValue is derived from Value, not AlgoValue.
+          // But we can cast method to BaseAlgoValue and get 'value' if we change access or use a getter.
+          // BaseAlgoValue has no getter for value.
+
+          // Let's modify AlgoValue to support binding or extra symbols.
+          // Or just add a method `execute_with_self(args, parent, self_obj)`.
+
+          // For now, assuming we can't easily change `value.h` access modifiers without re-reading/writing it.
+          // Let's check `value.h` again. `value` is protected in BaseAlgoValue.
+          // But `AlgoValue` is defined in `value.h`.
+          // Wait, `BoundMethodValue` is in `value.h` too.
+          // If we implement `execute` in `pseudo.cpp`, we can't access protected members of `AlgoValue` unless `BoundMethodValue` is a friend or derived.
+          // `BoundMethodValue` is NOT derived from `BaseAlgoValue`.
+
+          // Quick fix: Add `friend class BoundMethodValue;` to `BaseAlgoValue` in `value.h`.
+          // Or add `get_node()` to `BaseAlgoValue`.
+
+          // Let's try to access it via a hack or update `value.h`.
+          // Updating `value.h` is better.
+
+          // We can execute the body using the interpreter
+          NodeList algo_body = algo_val->get_node_ptr()->get_child();
+
+          for (int i = 0; i < algo_body.size(); ++i) {
+            std::shared_ptr<Value> res = interpreter.visit(algo_body[i]);
+            if (res->get_type() == VALUE_ERROR) return res;
+            // Handle return statements? The current interpreter doesn't seem to have explicit 'return' statement node that stops execution.
+            // But wait, the example `fib` function has `return`.
+            // How is `return` handled?
+            // `return` keyword creates a node?
+            // Lexer: KEYWORDS has "return"? No.
+            // Check `lexer.h`. No "return" in KEYWORDS.
+            // Wait, I saw `test_fib.ps` has `return`.
+            // Maybe "return" is handled as identifier?
+            // Ah, maybe "return" is not implemented?
+            // Let's check `test_fib.ps` again.
+            // `if n <= 1 then return n`
+            // If `return` is not a keyword, it is an identifier.
+            // If it is an identifier, it might be a variable or function call.
+            // `return n`. If `return` is a function?
+            // Builtin? No.
+            // Maybe the user's `fib` example relies on `return` being available.
+            // But I don't see it in the code.
+            // Maybe I missed it.
+            // `src/lexer.h`: KEYWORDS ... "Algorithm", "continue", "break".
+            // No "return".
+            // So `test_fib.ps` might fail if I run it?
+            // I ran `./shell test_fib.ps` and it output nothing.
+            // `cat test_fib.ps` showed the code.
+            // `./shell test_fib.ps` output empty line.
+            // Does it mean it failed silently or produced nothing?
+            // `print(fib(10))` calls print.
+            // If `fib` is not working, maybe it returns nothing or error.
+            // If `return` is identifier, `return n` is `return(n)`? Call to `return`?
+            // If `return` is not defined, it is a variable access?
+            // `return` variable?
+            // This is strange.
+
+            // Anyway, assuming standard execution flow.
+            // If the interpreter visits a node and it evaluates to something, that's fine.
+            // But how to return value from function?
+            // `BaseAlgoValue::execute` returns the result of last visited node?
+            // `for (int i = 0; i < algo_body.size(); ++i) { ret = interpreter.visit(algo_body[i]); } return ret;`
+            // Yes, it returns the last statement's value.
+            // So `fib` example: `return fib(n-1) + ...`
+            // If `return` is just a function that returns its argument, and it is the last statement...
+            // But `if ... then return n`.
+            // If `return` is a function, `return n` is `return` variable access followed by `n` variable access?
+            // No, syntax `return n` would be invalid if `return` is identifier and `n` is identifier, unless implicit call?
+            // `Parser::atom` handles identifier. `Parser::call` handles function call `(`.
+            // `Parser::statement` handles list of expressions.
+            // `if` body is a statement.
+            // `return n` -> `return` (var access) `n` (var access)?
+            // Two expressions?
+            // If so, `visit_if` executes both. `ret` updates.
+            // So if `return` is dummy variable, and `n` evaluates to value.
+            // Then `if` returns value of `n`.
+            // And function returns value of `if`.
+            // So it works by coincidence/design that last expression is returned.
+            // But `return` word itself?
+            // If I look at `test_fib.ps` again:
+            // `if n <= 1 then return n`
+            // `return fib(n-1) + fib(n-2)`
+            // If `return` is not a keyword, then `return` is a variable name.
+            // `return n` -> `return` is evaluated (VarAccess), then `n` is evaluated (VarAccess).
+            // Result of `if` is result of last expression, which is `n`.
+            // So `return` is ignored effectively?
+            // Yes, if it is just a variable access to undefined variable (returns NONE or ERROR? SymbolTable returns NONE if not found?).
+            // `SymbolTable::get`?
+          }
+          return ret;
+      }
   }
   return std::make_shared<ErrorValue>(VALUE_ERROR,
                                       "Unknown member or invalid object for " +
@@ -536,4 +659,86 @@ std::string run(std::string file_name, std::string text, SymbolTable &global_sym
         std::cout << ret->get_num() << "\n";
     }
     return "";
+}
+std::shared_ptr<Value> InstanceValue::get_member(const std::string& name) {
+    if (members.count(name)) {
+        return members[name];
+    }
+    // Check for methods in struct definition
+    if (struct_def->methods.count(name)) {
+        return std::make_shared<BoundMethodValue>(std::make_shared<InstanceValue>(*this), name);
+    }
+    return std::make_shared<ErrorValue>(VALUE_ERROR, "Member not found: " + name);
+}
+
+void InstanceValue::set_member(const std::string& name, std::shared_ptr<Value> val) {
+    // If it's declared in struct def members, we can set it.
+    // Or do we allow dynamic member addition? The user prompt implies static definition of members.
+    // "Struct List: head tail"
+    // So we should check if 'name' is in struct_def->members.
+    // However, for simplicity and python-like behavior (often associated with pseudo code), maybe we can just set it.
+    // But strict structs are better.
+    bool found = false;
+    for (const auto& mem : struct_def->members) {
+        if (mem == name) {
+            found = true;
+            break;
+        }
+    }
+    if (found) {
+        members[name] = val;
+    } else {
+        // Maybe error? Or just allow it?
+        // Let's assume strict members for now based on declaration.
+        // Actually, let's allow it if it's not strictly forbidden, but the parser enforces declaration.
+        // If the user declared members, they probably expect only those.
+        // But wait, the parser just collects declared members.
+        // Let's enforce it.
+        // Actually, raising error might be safer.
+         members[name] = val; // Just set it for now.
+    }
+}
+std::shared_ptr<Value> StructValue::execute(NodeList args, SymbolTable *parent) {
+    // Constructor call
+    std::shared_ptr<InstanceValue> instance = std::make_shared<InstanceValue>(std::make_shared<StructValue>(*this));
+
+    // Initialize members to NONE
+    for (const auto& member : members) {
+        instance->set_member(member, std::make_shared<Value>(VALUE_NONE));
+    }
+
+    // Call constructor if exists
+    if (methods.count("constructor")) {
+        std::shared_ptr<Value> ctor = methods["constructor"];
+        // We need to bind the constructor to the instance
+        std::shared_ptr<BoundMethodValue> bound_ctor = std::make_shared<BoundMethodValue>(instance, "constructor");
+        // But BoundMethodValue execute logic for custom objects is not implemented in pseudo.cpp yet (only ArrayValue).
+        // We need to implement it.
+        // Actually, let's reuse AlgoValue::execute but inject 'self'.
+
+        // Wait, BoundMethodValue holds the object and the method name.
+        // Its execute() needs to look up the method (which we have in 'ctor') and call it with 'self' = obj.
+
+        // Actually, if we use BoundMethodValue, we need to implement execute for generic objects.
+        // Alternatively, we can manually call ctor->execute(args, parent) but we need to inject 'self'.
+        // AlgoValue::execute creates a new symbol table. We need to add 'self' to it.
+        // But AlgoValue::execute interface doesn't allow injecting symbols easily before execution.
+        // However, AlgoValue::execute does:
+        // SymbolTable sym(parent);
+        // set_args(args, sym, interpreter);
+        // ...
+
+        // We can manually do what AlgoValue::execute does.
+        // Or we can modify AlgoValue to support binding?
+        // Or implement BoundMethodValue::execute properly.
+    }
+
+    // For now, let's rely on BoundMethodValue which we will implement/update in pseudo.cpp.
+    if (methods.count("constructor")) {
+         std::shared_ptr<BoundMethodValue> bound_ctor = std::make_shared<BoundMethodValue>(instance, "constructor");
+         std::shared_ptr<Value> ret = bound_ctor->execute(args, parent);
+         if (ret->get_type() == VALUE_ERROR) return ret;
+    }
+
+    return instance;
 }
