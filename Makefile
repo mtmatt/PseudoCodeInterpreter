@@ -6,6 +6,14 @@ SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp 
 BUILD_DIR = build
 OBJS = $(SRCS:src/%.cpp=$(BUILD_DIR)/%.o)
 
+# Google Test configuration
+GTEST_DIR = googletest/googletest
+TEST_CPPFLAGS = $(CPPFLAGS) -isystem $(GTEST_DIR)/include -Isrc -pthread
+
+# Test objects (exclude shell.o which contains main)
+TEST_OBJS = $(filter-out $(BUILD_DIR)/shell.o, $(OBJS))
+TEST_TARGET = run_tests
+
 $(TARGET): $(BUILD_DIR) $(OBJS)
 	$(CC) $(CPPFLAGS) $(OBJS) -o $(TARGET)
 
@@ -45,7 +53,24 @@ $(BUILD_DIR)/pseudo.o: value.h src/pseudo.cpp src/pseudo.h
 run : $(TARGET)
 	./shell
 
-.PHONY: clean all
+# Google Test rules
+
+GTEST_HEADERS = $(GTEST_DIR)/include/gtest/*.h \
+                $(GTEST_DIR)/include/gtest/internal/*.h
+
+$(BUILD_DIR)/gtest-all.o: $(GTEST_DIR)/src/gtest-all.cc $(GTEST_HEADERS)
+	$(CC) $(TEST_CPPFLAGS) -I$(GTEST_DIR) -c $(GTEST_DIR)/src/gtest-all.cc -o $@
+
+$(BUILD_DIR)/unittest.o: test/unittest.cpp $(GTEST_HEADERS)
+	$(CC) $(TEST_CPPFLAGS) -c test/unittest.cpp -o $@
+
+$(TEST_TARGET): $(BUILD_DIR) $(TEST_OBJS) $(BUILD_DIR)/gtest-all.o $(BUILD_DIR)/unittest.o
+	$(CC) $(TEST_CPPFLAGS) $(TEST_OBJS) $(BUILD_DIR)/gtest-all.o $(BUILD_DIR)/unittest.o -o $@
+
+test: $(TEST_TARGET)
+	./$(TEST_TARGET)
+
+.PHONY: clean all test
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET) $(TEST_TARGET)
 all: clean $(TARGET)
