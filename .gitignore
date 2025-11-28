@@ -31,8 +31,12 @@
 *.out
 *.app
 shell
+run_tests
 
 # VsCode
 .vscode
 .vscode/*
 .clangd
+
+# Build directory
+build/
