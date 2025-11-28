@@ -23,6 +23,23 @@ std::string BinOpNode::get_node() {
     return ret;
 }
 
+std::string StructDefNode::get_node() {
+    std::stringstream ss;
+    ss << "STRUCT " << struct_name->get_tok() << ":\n";
+    for(auto member : members) {
+        ss << TAB << member->get_tok() << "\n";
+    }
+    for(auto method : methods) {
+        ss << TAB << method->get_node() << "\n";
+    }
+    std::string ret, line;
+    while(std::getline(ss, line)) {
+        ret += line;
+        ret += "\n";
+    }
+    return ret;
+}
+
 NodeList BinOpNode::get_child() {
     return NodeList{left_node, right_node};
 }

@@ -27,6 +27,8 @@ const std::string NODE_ARRAY("ARRAY");
 const std::string NODE_ARRACCESS("ARRACCESS");
 const std::string NODE_ARRASSIGN("ARRASSIGN");
 const std::string NODE_MEMACCESS("MEMACCESS");
+const std::string NODE_STRUCTDEF("STRUCTDEF");
+const std::string NODE_RETURN("RETURN");
 const std::string TAB{"    "};
 
 class Node {
@@ -270,6 +272,35 @@ public:
     std::shared_ptr<Token> get_tok() override { return nullptr;}
 protected:
     std::shared_ptr<Node> obj, member;
+};
+
+class StructDefNode: public Node {
+public:
+    StructDefNode(std::shared_ptr<Token> _struct_name, const TokenList &_members, const NodeList &_methods)
+        : struct_name(_struct_name), members(_members), methods(_methods) {}
+    std::string get_node() override;
+    NodeList get_child() override { return methods;}
+    std::string get_type() override { return NODE_STRUCTDEF;}
+    std::shared_ptr<Token> get_tok() override { return struct_name;}
+    TokenList get_toks() override { return members;}
+    std::string get_name() override { return struct_name->get_value();}
+protected:
+    std::shared_ptr<Token> struct_name;
+    TokenList members;
+    NodeList methods;
+};
+
+class ReturnNode: public Node {
+public:
+    ReturnNode(std::shared_ptr<Node> _node)
+        : node(_node) {}
+    std::string get_node() override { return "RETURN " + node->get_node(); }
+    NodeList get_child() override { return NodeList{node};}
+    std::string get_type() override { return NODE_RETURN;}
+    std::shared_ptr<Token> get_tok() override { return nullptr;}
+    std::string get_name() override { return "";}
+protected:
+    std::shared_ptr<Node> node;
 };
 
 #endif

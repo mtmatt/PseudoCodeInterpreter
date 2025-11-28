@@ -27,10 +27,12 @@ public:
     std::shared_ptr<Value> visit_while(std::shared_ptr<Node>);
     std::shared_ptr<Value> visit_repeat(std::shared_ptr<Node>);
     std::shared_ptr<Value> visit_algo_def(std::shared_ptr<Node>);
+    std::shared_ptr<Value> visit_struct_def(std::shared_ptr<Node>);
     std::shared_ptr<Value> visit_algo_call(std::shared_ptr<Node>);
     std::shared_ptr<Value>& visit_array_access(std::shared_ptr<Node>);
     std::shared_ptr<Value> visit_array_assign(std::shared_ptr<Node>);
     std::shared_ptr<Value> visit_member_access(std::shared_ptr<Node>);
+    std::shared_ptr<Value> visit_return(std::shared_ptr<Node>);
 
     std::shared_ptr<Value> bin_op(std::shared_ptr<Value>, std::shared_ptr<Value>, std::shared_ptr<Token>);
     std::shared_ptr<Value> unary_op(std::shared_ptr<Value>, std::shared_ptr<Token>);
