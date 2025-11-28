@@ -107,8 +107,30 @@ std::shared_ptr<Value> BaseAlgoValue::set_args(NodeList &args, SymbolTable &sym,
   return std::make_shared<Value>();
 }
 
+class ScopeCleaner {
+public:
+    ScopeCleaner(SymbolTable& _sym) : sym(_sym) {}
+    ~ScopeCleaner() {
+        for (auto const& [name, val] : sym.get_symbols()) {
+            if (val->get_type() == VALUE_INSTANCE) {
+                if (val.use_count() == 1) {
+                    InstanceValue* inst = dynamic_cast<InstanceValue*>(val.get());
+                    std::shared_ptr<Value> self_ptr = val;
+                    std::shared_ptr<Value> dtor = inst->get_member("destructor", self_ptr);
+                    if (dtor->get_type() == VALUE_ALGO) {
+                         dtor->execute({}, sym.get_parent());
+                    }
+                }
+            }
+        }
+    }
+private:
+    SymbolTable& sym;
+};
+
 std::shared_ptr<Value> AlgoValue::execute(NodeList args, SymbolTable *parent) {
   SymbolTable sym(parent);
+  ScopeCleaner cleaner(sym);
   Interpreter interpreter(sym);
   std::shared_ptr<Value> ret{set_args(args, sym, interpreter)};
   if (ret->get_type() == VALUE_ERROR)
@@ -128,6 +150,7 @@ std::shared_ptr<Value> AlgoValue::execute(NodeList args, SymbolTable *parent) {
 std::shared_ptr<Value> BuiltinAlgoValue::execute(NodeList args,
                                                  SymbolTable *parent) {
   SymbolTable sym(parent);
+  ScopeCleaner cleaner(sym);
   Interpreter interpreter(sym);
   std::shared_ptr<Value> ret{set_args(args, sym, interpreter)};
   if (ret->get_type() == VALUE_ERROR)
@@ -245,6 +268,7 @@ std::shared_ptr<Value> BoundMethodValue::execute(NodeList args,
                                             "Method is not an algorithm");
 
       SymbolTable sym(parent);
+      ScopeCleaner cleaner(sym);
       Interpreter interpreter(sym);
 
       // Set self

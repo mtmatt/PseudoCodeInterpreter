@@ -48,6 +48,8 @@ public:
     std::shared_ptr<Value> get(std::string);
     void set(std::string, std::shared_ptr<Value>);
     void erase(std::string);
+    const std::map<std::string, std::shared_ptr<Value>>& get_symbols() const { return symbols; }
+    SymbolTable* get_parent() const { return parent; }
 protected:
     std::map<std::string, std::shared_ptr<Value>> symbols;
     SymbolTable *parent;
