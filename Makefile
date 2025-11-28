@@ -57,7 +57,7 @@ test: $(TEST_TARGET)
 	./$(TEST_TARGET)
 
 coverage: test
-	gcov -r -o $(BUILD_COV_DIR) src/*.cpp
+	gcov -r -o $(BUILD_COV_DIR) $(filter-out src/shell.cpp, $(SRCS))
 
 .PHONY: clean all test coverage
 clean:

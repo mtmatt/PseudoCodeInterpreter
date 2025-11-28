@@ -130,77 +130,119 @@ TEST(SymbolTableTest, TestErase) {
     EXPECT_EQ(retrieved->get_type(), VALUE_ERROR);
 }
 
-// Parser and Interpreter Tests
-TEST(InterpreterTest, TestArithmeticAdd) {
-    std::string text = "1 + 2";
+// Interpreter and Parser Tests - Expanded
+
+void check_interpreter(std::string text, std::string expected_val, std::string expected_type = VALUE_INT) {
     Lexer lexer("test", text);
     TokenList tokens = lexer.make_tokens();
     Parser parser(tokens);
     NodeList ast = parser.parse();
-
-    ASSERT_FALSE(ast.empty());
+    ASSERT_FALSE(ast.empty()) << "Parsing failed for: " << text;
 
     SymbolTable st;
     Interpreter interpreter(st);
-    auto result = interpreter.visit(ast[0]);
+
+    std::shared_ptr<Value> result;
+    for(auto node : ast) {
+        result = interpreter.visit(node);
+    }
 
     ASSERT_NE(result.get(), nullptr);
-    EXPECT_EQ(result->get_num(), "3");
+    if (expected_type != "ANY")
+        EXPECT_EQ(result->get_type(), expected_type) << "Type mismatch for: " << text;
+    if (expected_val != "IGNORE")
+        EXPECT_EQ(result->get_num(), expected_val) << "Value mismatch for: " << text;
 }
 
-TEST(InterpreterTest, TestArithmeticMulPrio) {
-    std::string text = "2 + 3 * 4";
-    Lexer lexer("test", text);
-    TokenList tokens = lexer.make_tokens();
-    Parser parser(tokens);
-    NodeList ast = parser.parse();
-
-    ASSERT_FALSE(ast.empty());
-
-    SymbolTable st;
-    Interpreter interpreter(st);
-    auto result = interpreter.visit(ast[0]);
-
-    ASSERT_NE(result.get(), nullptr);
-    // 2 + 12 = 14
-    EXPECT_EQ(result->get_num(), "14");
+TEST(InterpreterTest, TestArithmeticFull) {
+    check_interpreter("1 + 2", "3");
+    check_interpreter("10 - 4", "6");
+    check_interpreter("3 * 5", "15");
+    check_interpreter("20 / 4", "5");
+    check_interpreter("10 % 3", "1");
+    check_interpreter("2 ^ 3", "8");
+    check_interpreter("(2 + 3) * 4", "20");
+    check_interpreter("2 + 3 * 4", "14");
+    check_interpreter("-5", "-5");
+    check_interpreter("--5", "5");
 }
 
-TEST(InterpreterTest, TestArithmeticParen) {
-    std::string text = "(2 + 3) * 4";
-    Lexer lexer("test", text);
-    TokenList tokens = lexer.make_tokens();
-    Parser parser(tokens);
-    NodeList ast = parser.parse();
-
-    ASSERT_FALSE(ast.empty());
-
-    SymbolTable st;
-    Interpreter interpreter(st);
-    auto result = interpreter.visit(ast[0]);
-
-    ASSERT_NE(result.get(), nullptr);
-    // 5 * 4 = 20
-    EXPECT_EQ(result->get_num(), "20");
+TEST(InterpreterTest, TestLogicAndComparison) {
+    // Note: Equality uses '=', Assignment uses '<-'
+    check_interpreter("10 > 5", "1");
+    check_interpreter("10 < 5", "0");
+    check_interpreter("10 >= 10", "1");
+    check_interpreter("10 <= 5", "0");
+    check_interpreter("10 = 10", "1");
+    check_interpreter("10 != 5", "1");
+    check_interpreter("1 and 1", "1");
+    check_interpreter("1 and 0", "0");
+    check_interpreter("1 or 0", "1");
+    check_interpreter("0 or 0", "0");
+    check_interpreter("not 0", "1");
+    check_interpreter("not 1", "0");
 }
 
-TEST(InterpreterTest, TestVariable) {
-    SymbolTable st;
-    st.set("x", std::make_shared<TypedValue<int64_t>>(VALUE_INT, 10));
+TEST(InterpreterTest, TestControlFlowIf) {
+    // If Then
+    // Returns result of body execution
+    check_interpreter("a <- 0; if 1 then a <- 5", "5");
+    // Returns 0 if condition false and no else
+    check_interpreter("a <- 0; if 0 then a <- 5", "0");
 
-    std::string text = "x + 5";
-    Lexer lexer("test", text);
-    TokenList tokens = lexer.make_tokens();
-    Parser parser(tokens);
-    NodeList ast = parser.parse();
+    // If Then Else
+    check_interpreter("a <- 0; if 1 then a <- 5 else a <- 10", "5");
+    check_interpreter("a <- 0; if 0 then a <- 5 else a <- 10", "10");
 
-    ASSERT_FALSE(ast.empty());
+    // Else If (Nested)
+    check_interpreter("a <- 0; if 0 then a <- 5 else if 1 then a <- 10 else a <- 15", "10");
+}
 
-    Interpreter interpreter(st);
-    auto result = interpreter.visit(ast[0]);
+TEST(InterpreterTest, TestControlFlowFor) {
+    // For loop returns ArrayValue of results
+    // for i <- 1 to 5 step 1 do s <- s + i
+    // s starts 0. s becomes 1, 3, 6, 10, 15.
+    // Returns {1, 3, 6, 10, 15}
+    check_interpreter("s <- 0; for i <- 1 to 5 step 1 do s <- s + i", "{1, 3, 6, 10, 15}", VALUE_ARRAY);
 
-    ASSERT_NE(result.get(), nullptr);
-    EXPECT_EQ(result->get_num(), "15");
+    // Default step
+    check_interpreter("s <- 0; for i <- 1 to 5 do s <- s + i", "{1, 3, 6, 10, 15}", VALUE_ARRAY);
+}
+
+TEST(InterpreterTest, TestControlFlowWhile) {
+    // While loop
+    // i <- 0; while i < 5 do i <- i + 1
+    // Returns {1, 2, 3, 4, 5}
+    check_interpreter("i <- 0; while i < 5 do i <- i + 1", "{1, 2, 3, 4, 5}", VALUE_ARRAY);
+}
+
+TEST(InterpreterTest, TestControlFlowRepeat) {
+    // Repeat Until
+    // i <- 0; repeat i <- i + 1 until i = 5
+    // Returns {1, 2, 3, 4, 5}
+    check_interpreter("i <- 0; repeat i <- i + 1 until i = 5", "{1, 2, 3, 4, 5}", VALUE_ARRAY);
+}
+
+TEST(InterpreterTest, TestArray) {
+    check_interpreter("a <- {1, 2, 3}; a[1]", "1");
+    check_interpreter("a <- {1, 2, 3}; a[2]", "2");
+    check_interpreter("a <- {1, 2, 3}; a.size()", "3");
+    // push/pop modify array and return something
+    // push returns back() -> 4
+    check_interpreter("a <- {1, 2, 3}; a.push(4)", "4");
+    // pop returns popped value -> 3
+    check_interpreter("a <- {1, 2, 3}; a.pop()", "3");
+}
+
+TEST(InterpreterTest, TestBuiltin) {
+    check_interpreter("int(\"123\")", "123", VALUE_INT);
+    check_interpreter("float(\"12.34\")", "12.34", VALUE_FLOAT);
+    check_interpreter("string(123)", "123", VALUE_STRING);
+}
+
+TEST(InterpreterTest, TestAssignment) {
+    check_interpreter("x <- 10", "10");
+    check_interpreter("x <- 10; x <- x + 5", "15");
 }
 
 int main(int argc, char *argv[]) {
