@@ -253,15 +253,15 @@ std::shared_ptr<Value> Interpreter::visit_while(std::shared_ptr<Node> node) {
     ValueList ret;
     while(std::stoll(visit(child[0])->get_num()) == 1) {
         if(child.size() == 2) {
-            std::shared_ptr<Value> val = visit(child[1]);
-            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
-                return val;
-            ret.push_back(val);
-        }
-        for(int index{1}; index < child.size(); ++index) {
-            std::shared_ptr<Value> val{visit(child[index])};
-            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
-                return val;
+            ret.push_back(visit(child[1]));
+            if(ret.back()->get_type() == VALUE_ERROR) 
+                return ret.back();
+        } else {
+            for(int index{1}; index < child.size(); ++index) {
+                std::shared_ptr<Value> ret{visit(child[index])};
+                if(ret->get_type() == VALUE_ERROR)
+                    return ret;
+            }
         }
     }
     return std::make_shared<ArrayValue>(ret);
@@ -272,15 +272,15 @@ std::shared_ptr<Value> Interpreter::visit_repeat(std::shared_ptr<Node> node) {
     ValueList ret;
     do {
         if(child.size() == 2) {
-            std::shared_ptr<Value> val = visit(child[1]);
-            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
-                return val;
-            ret.push_back(val);
-        }
-        for(int index{1}; index < child.size(); ++index) {
-            std::shared_ptr<Value> val{visit(child[index])};
-            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
-                return val;
+            ret.push_back(visit(child[1]));
+            if(ret.back()->get_type() == VALUE_ERROR) 
+                return ret.back();
+        } else {
+            for(int index{1}; index < child.size(); ++index) {
+                std::shared_ptr<Value> ret{visit(child[index])};
+                if(ret->get_type() == VALUE_ERROR)
+                    return ret;
+            }
         }
     } while(std::stoll(visit(child[0])->get_num()) == 0);
     return std::make_shared<ArrayValue>(ret);

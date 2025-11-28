@@ -40,3 +40,9 @@ run_tests
 
 # Build directory
 build/
+build_cov/
+
+# Coverage files
+*.gcov
+*.gcda
+*.gcno
