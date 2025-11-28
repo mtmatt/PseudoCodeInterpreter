@@ -107,8 +107,30 @@ std::shared_ptr<Value> BaseAlgoValue::set_args(NodeList &args, SymbolTable &sym,
   return std::make_shared<Value>();
 }
 
+class ScopeCleaner {
+public:
+    ScopeCleaner(SymbolTable& _sym) : sym(_sym) {}
+    ~ScopeCleaner() {
+        for (auto const& [name, val] : sym.get_symbols()) {
+            if (val->get_type() == VALUE_INSTANCE) {
+                if (val.use_count() == 1) {
+                    InstanceValue* inst = dynamic_cast<InstanceValue*>(val.get());
+                    std::shared_ptr<Value> self_ptr = val;
+                    std::shared_ptr<Value> dtor = inst->get_member("destructor", self_ptr);
+                    if (dtor->get_type() == VALUE_ALGO) {
+                         dtor->execute({}, sym.get_parent());
+                    }
+                }
+            }
+        }
+    }
+private:
+    SymbolTable& sym;
+};
+
 std::shared_ptr<Value> AlgoValue::execute(NodeList args, SymbolTable *parent) {
   SymbolTable sym(parent);
+  ScopeCleaner cleaner(sym);
   Interpreter interpreter(sym);
   std::shared_ptr<Value> ret{set_args(args, sym, interpreter)};
   if (ret->get_type() == VALUE_ERROR)
@@ -118,6 +140,9 @@ std::shared_ptr<Value> AlgoValue::execute(NodeList args, SymbolTable *parent) {
 
   for (int i = 0; i < algo_body.size(); ++i) {
     ret = interpreter.visit(algo_body[i]);
+    if (ret->get_type() == VALUE_RETURN) {
+        return dynamic_cast<ReturnValue*>(ret.get())->get_value();
+    }
   }
   return ret;
 }
@@ -125,6 +150,7 @@ std::shared_ptr<Value> AlgoValue::execute(NodeList args, SymbolTable *parent) {
 std::shared_ptr<Value> BuiltinAlgoValue::execute(NodeList args,
                                                  SymbolTable *parent) {
   SymbolTable sym(parent);
+  ScopeCleaner cleaner(sym);
   Interpreter interpreter(sym);
   std::shared_ptr<Value> ret{set_args(args, sym, interpreter)};
   if (ret->get_type() == VALUE_ERROR)
@@ -220,6 +246,50 @@ std::shared_ptr<Value> BoundMethodValue::execute(NodeList args,
             VALUE_ERROR, "Cannot call back on an empty array\n");
       }
       return arr_obj->back();
+    }
+  } else if (obj->get_type() == VALUE_INSTANCE) {
+    InstanceValue *inst_obj = dynamic_cast<InstanceValue *>(obj.get());
+    // Find method
+    if (inst_obj->struct_def->methods.count(method_name)) {
+      std::shared_ptr<Value> method =
+          inst_obj->struct_def->methods[method_name];
+      // method is likely AlgoValue.
+      // We need to execute it with 'self' in scope.
+      // We can use the existing AlgoValue::execute, but we need to inject
+      // 'self'. Since AlgoValue::execute creates a new symbol table, we can't
+      // inject it easily from outside *before* it starts unless we modify it or
+      // subclass it. However, we can create a new AlgoValue or wrapper that
+      // injects 'self'.
+
+      // Actually, let's copy the logic of AlgoValue::execute here but add self.
+      AlgoValue *algo_val = dynamic_cast<AlgoValue *>(method.get());
+      if (!algo_val)
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Method is not an algorithm");
+
+      SymbolTable sym(parent);
+      ScopeCleaner cleaner(sym);
+      Interpreter interpreter(sym);
+
+      // Set self
+      sym.set("self", obj);
+
+      std::shared_ptr<Value> ret{algo_val->set_args(args, sym, interpreter)};
+      if (ret->get_type() == VALUE_ERROR)
+        return ret;
+
+      // Execute body
+      NodeList algo_body = algo_val->get_node_ptr()->get_child();
+
+      std::shared_ptr<Value> res = ret;
+      for (int i = 0; i < algo_body.size(); ++i) {
+        res = interpreter.visit(algo_body[i]);
+        if (res->get_type() == VALUE_ERROR)
+          return res;
+        if (res->get_type() == VALUE_RETURN)
+          return dynamic_cast<ReturnValue*>(res.get())->get_value();
+      }
+      return res;
     }
   }
   return std::make_shared<ErrorValue>(VALUE_ERROR,
@@ -498,42 +568,133 @@ std::shared_ptr<Value> pow(std::shared_ptr<Value> a, std::shared_ptr<Value> b) {
         std::pow(std::stoll(a->get_num()), std::stoll(b->get_num())));
 }
 
+std::shared_ptr<Value> InstanceValue::get_member(const std::string &name, std::shared_ptr<Value> self) {
+  if (members.count(name)) {
+    return members[name];
+  }
+  // Check for methods in struct definition
+  if (struct_def->methods.count(name)) {
+    if (self.get() == nullptr) {
+         // Fallback if self not provided, but this shouldn't happen for method calls
+         // Create a copy? Or error?
+         // For now, create a copy as before, but warn?
+         return std::make_shared<BoundMethodValue>(
+            std::make_shared<InstanceValue>(*this), name);
+    }
+    return std::make_shared<BoundMethodValue>(self, name);
+  }
+  return std::make_shared<ErrorValue>(VALUE_ERROR, "Member not found: " + name);
+}
+
+void InstanceValue::set_member(const std::string &name,
+                               std::shared_ptr<Value> val) {
+  // If it's declared in struct def members, we can set it.
+  bool found = false;
+  for (const auto &mem : struct_def->members) {
+    if (mem == name) {
+      found = true;
+      break;
+    }
+  }
+  if (found) {
+    members[name] = val;
+  } else {
+    members[name] = val; // Just set it for now.
+  }
+}
+std::shared_ptr<Value> StructValue::execute(NodeList args,
+                                            SymbolTable *parent) {
+  // Constructor call
+  std::shared_ptr<InstanceValue> instance =
+      std::make_shared<InstanceValue>(std::make_shared<StructValue>(*this));
+
+  // Initialize members to NONE
+  for (const auto &member : members) {
+    instance->set_member(member, std::make_shared<Value>(VALUE_NONE));
+  }
+
+  // Call constructor if exists
+  if (methods.count("constructor")) {
+    std::shared_ptr<Value> ctor = methods["constructor"];
+    // We need to bind the constructor to the instance
+    std::shared_ptr<BoundMethodValue> bound_ctor =
+        std::make_shared<BoundMethodValue>(instance, "constructor");
+    // But BoundMethodValue execute logic for custom objects is not implemented
+    // in pseudo.cpp yet (only ArrayValue). We need to implement it. Actually,
+    // let's reuse AlgoValue::execute but inject 'self'.
+
+    // Wait, BoundMethodValue holds the object and the method name.
+    // Its execute() needs to look up the method (which we have in 'ctor') and
+    // call it with 'self' = obj.
+
+    // Actually, if we use BoundMethodValue, we need to implement execute for
+    // generic objects. Alternatively, we can manually call ctor->execute(args,
+    // parent) but we need to inject 'self'. AlgoValue::execute creates a new
+    // symbol table. We need to add 'self' to it. But AlgoValue::execute
+    // interface doesn't allow injecting symbols easily before execution.
+    // However, AlgoValue::execute does:
+    // SymbolTable sym(parent);
+    // set_args(args, sym, interpreter);
+    // ...
+
+    // We can manually do what AlgoValue::execute does.
+    // Or we can modify AlgoValue to support binding?
+    // Or implement BoundMethodValue::execute properly.
+  }
+
+  // For now, let's rely on BoundMethodValue which we will implement/update in
+  // pseudo.cpp.
+  if (methods.count("constructor")) {
+    std::shared_ptr<BoundMethodValue> bound_ctor =
+        std::make_shared<BoundMethodValue>(instance, "constructor");
+    std::shared_ptr<Value> ret = bound_ctor->execute(args, parent);
+    if (ret->get_type() == VALUE_ERROR)
+      return ret;
+  }
+
+  return instance;
+}
+
 /// --------------------
 /// Run
 /// --------------------
 
-std::string run(std::string file_name, std::string text, SymbolTable &global_symbol_table) {
-    Lexer lexer(file_name, text);
-    TokenList tokens = lexer.make_tokens();
-    if(tokens.empty()) return "";
-    if(tokens[0]->get_type() == TOKEN_ERROR)
-        std::cout << "Tokens: " << tokens << "\n";
-
-    Parser parser(tokens);
-    NodeList ast = parser.parse();
-    
-    for(auto node : ast) {
-        if(node->get_type() == NODE_ERROR)
-            std::cout << "Nodes: " << node->get_node() << "\n";
-        if(node->get_type() == NODE_ERROR) return "ABORT";
-    }
-
-    Interpreter interpreter(global_symbol_table);
-    ArrayValue *ret{new ArrayValue(ValueList(0))};
-    for(auto node : ast) {
-        ret->push_back(interpreter.visit(node));
-        if(ret->back()->get_type() == VALUE_ERROR) {
-            std::cout << ret->back()->get_num() << "\n";
-            return "ABORT";
-        }
-    }
-
-    while(ret->get_type() == VALUE_ARRAY && ret->back()->get_type() == VALUE_ARRAY) {
-        ret = dynamic_cast<ArrayValue*>(ret->back().get());
-    }
-    
-    if(file_name == "stdin" && ret->operator[](0)->get_type() != VALUE_NONE) {
-        std::cout << ret->get_num() << "\n";
-    }
+std::string run(std::string file_name, std::string text,
+                SymbolTable &global_symbol_table) {
+  Lexer lexer(file_name, text);
+  TokenList tokens = lexer.make_tokens();
+  if (tokens.empty())
     return "";
+  if (tokens[0]->get_type() == TOKEN_ERROR)
+    std::cout << "Tokens: " << tokens << "\n";
+
+  Parser parser(tokens);
+  NodeList ast = parser.parse();
+
+  for (auto node : ast) {
+    if(node->get_type() == NODE_ERROR)
+    std::cout << "Nodes: " << node->get_node() << "\n";
+    if (node->get_type() == NODE_ERROR)
+      return "ABORT";
+  }
+
+  Interpreter interpreter(global_symbol_table);
+  ArrayValue *ret{new ArrayValue(ValueList(0))};
+  for (auto node : ast) {
+    ret->push_back(interpreter.visit(node));
+    if (ret->back()->get_type() == VALUE_ERROR) {
+      std::cout << ret->back()->get_num() << "\n";
+      return "ABORT";
+    }
+  }
+
+  while (ret->get_type() == VALUE_ARRAY &&
+         ret->back()->get_type() == VALUE_ARRAY) {
+    ret = dynamic_cast<ArrayValue *>(ret->back().get());
+  }
+
+  if (file_name == "stdin" && ret->operator[](0)->get_type() != VALUE_NONE) {
+    std::cout << ret->get_num() << "\n";
+  }
+  return "";
 }

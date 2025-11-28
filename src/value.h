@@ -18,6 +18,9 @@ const std::string VALUE_ALGO{"Algo"};
 const std::string VALUE_STRING{"Str"};
 const std::string VALUE_ERROR{"ERROR"};
 const std::string VALUE_ARRAY{"Array"};
+const std::string VALUE_STRUCT{"Struct"};
+const std::string VALUE_INSTANCE{"Instance"};
+const std::string VALUE_RETURN{"Return"};
 
 const std::map<char, char> REVERSE_ESCAPE_CHAR {
     {'\n', 'n'}, {'\r', 'r'},
@@ -79,6 +82,9 @@ public:
     std::string get_num() override { return algo_name;}
     std::string repr() override { return get_num();}
     std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr) override;
+    friend class BoundMethodValue;
+    // Expose value for friends/derived or public use if needed for method binding
+    std::shared_ptr<Node> get_node_ptr() { return value; }
 protected:
 };
 
@@ -162,6 +168,46 @@ std::shared_ptr<Value> operator||(std::shared_ptr<Value>, std::shared_ptr<Value>
 
 std::shared_ptr<Value> operator-(std::shared_ptr<Value>);
 std::shared_ptr<Value> operator!(std::shared_ptr<Value>);
+
+class StructValue : public Value {
+public:
+    StructValue(const std::string& _name, const std::vector<std::string>& _members, const std::map<std::string, std::shared_ptr<Value>>& _methods)
+        : Value(VALUE_STRUCT), name(_name), members(_members), methods(_methods) {}
+
+    std::string get_num() override { return name; }
+    std::string repr() override { return "<Struct " + name + ">"; }
+
+    std::vector<std::string> members;
+    std::map<std::string, std::shared_ptr<Value>> methods;
+    std::string name;
+    std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr) override;
+};
+
+class InstanceValue : public Value {
+public:
+    InstanceValue(std::shared_ptr<StructValue> _struct_def)
+        : Value(VALUE_INSTANCE), struct_def(_struct_def) {}
+
+    std::string get_num() override { return struct_def->name + " Instance"; }
+    std::string repr() override { return "<Instance of " + struct_def->name + ">"; }
+
+    std::shared_ptr<Value> get_member(const std::string& name, std::shared_ptr<Value> self = nullptr);
+    void set_member(const std::string& name, std::shared_ptr<Value> val);
+
+    std::shared_ptr<StructValue> struct_def;
+    std::map<std::string, std::shared_ptr<Value>> members;
+};
+
+class ReturnValue : public Value {
+public:
+    ReturnValue(std::shared_ptr<Value> _value)
+        : Value(VALUE_RETURN), value(_value) {}
+    std::string get_num() override { return value->get_num(); }
+    std::string repr() override { return value->repr(); }
+    std::shared_ptr<Value> get_value() { return value; }
+protected:
+    std::shared_ptr<Value> value;
+};
 
 template class TypedValue<double>;
 template class TypedValue<int64_t>;
