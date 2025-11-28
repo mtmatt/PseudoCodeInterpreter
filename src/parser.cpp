@@ -80,6 +80,9 @@ std::shared_ptr<Node> Parser::atom(int tab_expect) {
     } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "Algorithm") {
         advance();
         return algo_def(tab_expect);
+    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "Struct") {
+        advance();
+        return struct_def(tab_expect);
     } else if(tok->get_type() == TOKEN_LEFT_BRACE) {
         advance();
         return array_expr(tab_expect);
@@ -170,8 +173,16 @@ std::shared_ptr<Node> Parser::if_expr(int tab_expect) {
     }
     advance();
     NodeList exp;
-    if(current_tok->get_type() == TOKEN_NEWLINE)
+    if(current_tok->get_type() == TOKEN_NEWLINE) {
+        // Fix indentation check in statement()
+        // statement expects tokens to be exactly tab_expect + 1 indented if they start with newline
+        // but expr() consumes newline? No.
+        // statement() logic:
+        // while newline:
+        //    check tabs
+        //    parse expr
         exp = statement(tab_expect + 1);
+    }
     else
         exp = NodeList{expr(tab_expect)};
     for(auto node : exp)
@@ -282,11 +293,91 @@ std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
     std::shared_ptr<Token> algo_name = current_tok;
     if(current_tok->get_type() == TOKEN_IDENTIFIER) {
         advance();
-        if(current_tok->get_type() != TOKEN_LEFT_PAREN) {
+        if(current_tok->get_type() == TOKEN_SCOPE_RES) {
+             std::shared_ptr<Token> struct_name = algo_name;
+             advance();
+             if (current_tok->get_type() != TOKEN_IDENTIFIER && current_tok->get_type() != TOKEN_KEYWORD) {
+                  std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected method name after ::\n" RESET;
+                  std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
+                  return std::make_shared<ErrorNode>(error_token);
+             }
+             // For now, construct a name like "StructName::MethodName" to handle it easily in symbol table?
+             // Or better, handle it in interpreter.
+             // Let's modify AlgorithmDefNode to optionally support struct scope.
+             // But for now, let's just mangle the name or use the existing structure.
+             // The parser creates an AlgorithmDefNode which takes a Token for name.
+             // We can create a new Token with the mangled name, or update AlgorithmDefNode.
+             // Let's just create a new Token with name "Struct::Method".
+             std::string full_name = struct_name->get_value() + "::" + current_tok->get_value();
+             algo_name = std::make_shared<TypedToken<std::string>>(TOKEN_IDENTIFIER, struct_name->get_pos(), full_name);
+             advance();
+        } else if (current_tok->get_type() == TOKEN_IDENTIFIER) {
+             // Handle "Algorithm List constructor" where List is struct name and constructor is method name
+             // Or generally "Algorithm StructName MethodName"
+             // But wait, "constructor" is just identifier.
+             // If we are inside struct definition, "Algorithm constructor" is handled by "Algorithm" keyword check in struct_def loop.
+             // But inside struct_def, we call algo_def.
+             // If we have `Algorithm List constructor...` inside struct?
+             // struct_def consumes "Algorithm". Calls algo_def.
+             // algo_def sees "List".
+             // It consumes "List". Checks for SCOPE_RES. No.
+             // It checks for LPAREN. No.
+             // It checks for "operator". No.
+             // It falls here.
+             // If next token is identifier "constructor", then "List" was struct name prefix without "::".
+             // Allow "Identifier Identifier" as name?
+             // "List constructor" -> method name "constructor"?
+             // The prompt syntax: `Algorithm List constructor(_head, _tail):`
+             // So yes, `List` (struct name) `constructor` (method name).
+             // And global: `Algorithm List::additional_member_function`
+             // So `struct_name :: method_name` OR `struct_name method_name` (space separated)?
+             // Or just `method_name` inside struct?
+             // The example inside struct: `Algorithm List constructor...`
+             // Also `Algorithm push_element...` (no List prefix).
+             // So if prefix matches struct name, ignore it?
+             // Let's allow consuming an extra identifier if it's not LPAREN.
+
+             // Current token is "List". Next is "constructor".
+             // We are at `if (current_tok->get_type() != TOKEN_LEFT_PAREN)` check.
+             // `current_tok` is LPAREN? No, it is "constructor" (from example).
+             // Wait, `algo_name` holds "List". `current_tok` is "constructor".
+             // So we are in the `else if` block.
+
+             // We can check if `current_tok` is identifier.
+             // If so, update `algo_name` to `current_tok` (method name), and treat `algo_name` (struct name) as context?
+             // But `algo_def` creates `AlgorithmDefNode` with a name.
+             // If we are inside struct, the name should be just method name?
+             // `List constructor` -> name is `constructor`.
+             // So we update `algo_name` to `current_tok` and advance.
+             algo_name = current_tok;
+             advance();
+        } else if (current_tok->get_type() != TOKEN_LEFT_PAREN) {
             std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected a \"(\"\n" RESET;
             std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
             return std::make_shared<ErrorNode>(error_token);
         }
+    } else if (current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "operator") {
+        // Operator overloading
+        advance();
+        std::string op_name = "operator ";
+        if (KEYWORDS.count(current_tok->get_value()) || TO_TOKEN_TYPE.count(current_tok->get_value()[0])) {
+             op_name += current_tok->get_value();
+        } else {
+             op_name += current_tok->get_type(); // fallback
+        }
+        // Need to handle operators properly. For now, assume simple operators or identifiers.
+        // Actually, for "operator add", "add" is likely TOKEN_ADD (if '+') or identifier/keyword.
+        // In the example: `Algorithm operator add(other)`
+        // `add` is not a keyword. `+` is TOKEN_ADD.
+        // But the user example says `operator add`.
+        // If `add` is not a keyword, it is an identifier.
+        // If it is `+`, lexer produces TOKEN_ADD.
+        // Check what `add` is tokenized as.
+        // "add" is not in KEYWORDS, BUILTIN_ALGO, BUILTIN_CONST. So it is IDENTIFIER.
+        op_name = "operator " + current_tok->get_value();
+        algo_name = std::make_shared<TypedToken<std::string>>(TOKEN_IDENTIFIER, current_tok->get_pos(), op_name);
+        advance();
+
     } else if(current_tok->get_type() != TOKEN_LEFT_PAREN) {
         algo_name = std::make_shared<TypedToken<std::string>>(TOKEN_IDENTIFIER, current_tok->get_pos(), "Anonymous");
     } else {
@@ -339,15 +430,25 @@ std::shared_ptr<Node> Parser::pow(int tab_expect) {
 std::shared_ptr<Node> Parser::call(int tab_expect) {
     std::shared_ptr<Node> at{atom(tab_expect)};
     if(at->get_type() == NODE_ERROR) return at;
-    if(current_tok->get_type() == TOKEN_DOT) {
+    while(current_tok->get_type() == TOKEN_DOT) {
         advance();
         std::shared_ptr<Node> member{atom(tab_expect)};
         at = std::make_shared<MemberAccessNode>(at, member);
     }
-    if(current_tok->get_type() != TOKEN_LEFT_PAREN && current_tok->get_type() != TOKEN_LEFT_SQUARE) {
+    if(current_tok->get_type() != TOKEN_LEFT_PAREN && current_tok->get_type() != TOKEN_LEFT_SQUARE && current_tok->get_type() != TOKEN_ASSIGN) {
         return at;
     }
-    std::shared_ptr<Node> ret;
+
+    // Check for assignment to at directly (e.g. member assignment)
+    if (current_tok->get_type() == TOKEN_ASSIGN) {
+        advance();
+        std::shared_ptr<Node> val = expr(tab_expect);
+        if(val->get_type() == NODE_ERROR) return val;
+        // Reuse ArrayAssignNode for general assignment to lvalue expression
+        return std::make_shared<ArrayAssignNode>(at, val);
+    }
+
+    std::shared_ptr<Node> ret = at;
     while(current_tok->get_type() == TOKEN_LEFT_PAREN || current_tok->get_type() == TOKEN_LEFT_SQUARE) {
         while(current_tok->get_type() == TOKEN_LEFT_PAREN) {
             advance();
@@ -421,29 +522,66 @@ NodeList Parser::statement(int tab_expect) {
     do {
         while(current_tok->get_type() == TOKEN_NEWLINE) {
             std::shared_ptr<Token> tok = current_tok;
-            advance();
-            for(int i{0}; i < tab_expect; ++i) {
-                if(current_tok->get_type() != TOKEN_TAB) {
-                    while(current_tok->get_type() != TOKEN_NEWLINE) {
-                        back();
-                    }
-                    return ret;
-                }
+            std::shared_ptr<Token> next_tok;
+            advance(); // consume NEWLINE
+
+            // Check indentation
+            int tab_count = 0;
+            while(current_tok->get_type() == TOKEN_TAB) {
+                tab_count++;
                 advance();
             }
+
+            if (tab_count < tab_expect) {
+                // Dedent, end of block
+                // Push back current non-tab token? No, we need to rewind to the start of this line (after newline)
+                // But wait, the parser state is now at the first non-tab token of the line.
+                // We should rewind to the NEWLINE token we just consumed?
+                // Actually, if indentation is less, it means this line belongs to outer block.
+                // So we should return.
+                // But we must push back the tokens we consumed (including NEWLINE and tabs) so outer block can consume them?
+                // Or just push back the non-tab token, and let outer block handle tabs?
+                // The outer block logic:
+                // It called statement(tab_expect + 1).
+                // If we return, it continues.
                 
-            if(current_tok->get_type() == TOKEN_TAB) {
-                std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected " + std::to_string(tab_expect) + " tabs" RESET "\n";
-                std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, tok->get_pos(), error_msg);
-                ret.clear();
-                ret.push_back(std::make_shared<ErrorNode>(error_token));
+                // Let's look at how it was implemented.
+                // It was rewinding to NEWLINE.
+
+                // Rewind logic:
+                // We advanced past NEWLINE, and past 'tab_count' tabs.
+                // We need to rewind 'tab_count' + 1 times.
+                for (int i=0; i < tab_count + 1; ++i) back();
                 return ret;
+            } else if (tab_count > tab_expect) {
+                 std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected " + std::to_string(tab_expect) + " tabs" RESET "\n";
+                 std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, tok->get_pos(), error_msg);
+                 ret.clear();
+                 ret.push_back(std::make_shared<ErrorNode>(error_token));
+                 return ret;
+            }
+            // Exact indentation matches tab_expect
+            if(current_tok->get_type() == TOKEN_NEWLINE) {
+                // Empty line with just tabs? or just multiple newlines?
+                // Loop again.
+                back(); // go back to NEWLINE to let loop handle it
+                break; // break inner loop, continue outer do-while
             }
         }
+
         while(current_tok->get_type() == TOKEN_SEMICOLON)
             advance();
-        if(current_tok->get_type() != TOKEN_NONE)
-            ret.push_back(expr(tab_expect));
+
+        if(current_tok->get_type() != TOKEN_NONE && current_tok->get_type() != TOKEN_NEWLINE) {
+             std::shared_ptr<Node> val = expr(tab_expect);
+             if (val->get_type() == NODE_ERROR) {
+                 ret.clear();
+                 ret.push_back(val);
+                 return ret;
+             }
+             ret.push_back(val);
+        }
+
     } while(current_tok->get_type() == TOKEN_NEWLINE || current_tok->get_type() == TOKEN_SEMICOLON);
     return ret;
 }
@@ -451,4 +589,60 @@ NodeList Parser::statement(int tab_expect) {
 NodeList Parser::parse() {
     NodeList ret = statement(0);
     return ret;
+}std::shared_ptr<Node> Parser::struct_def(int tab_expect) {
+    std::shared_ptr<Token> struct_name = current_tok;
+    if (current_tok->get_type() != TOKEN_IDENTIFIER) {
+        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected an identifier\n" RESET;
+        std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
+        return std::make_shared<ErrorNode>(error_token);
+    }
+    advance();
+
+    if (current_tok->get_type() != TOKEN_COLON) {
+        std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected a \":\"\n" RESET;
+        std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
+        return std::make_shared<ErrorNode>(error_token);
+    }
+    advance();
+
+    TokenList members;
+    NodeList methods;
+
+    while (current_tok->get_type() == TOKEN_NEWLINE) {
+        std::shared_ptr<Token> tok_newline = current_tok;
+        advance();
+        for (int i = 0; i < tab_expect + 1; ++i) {
+            if (current_tok->get_type() != TOKEN_TAB) {
+                 // Indentation finished, end of struct definition
+                 while(current_tok != tok_newline) back(); // Go back to newline
+                 return std::make_shared<StructDefNode>(struct_name, members, methods);
+            }
+            advance();
+        }
+
+        // Inside struct block
+        if (current_tok->get_type() == TOKEN_IDENTIFIER) {
+            // Member variable or generic algorithm?
+            // Actually, Algorithm keyword starts an algorithm definition.
+            // Identifiers are member variables.
+            // But wait, what if it's "Algorithm"?
+            // If it is an identifier, it is a member.
+            members.push_back(current_tok);
+            advance();
+        } else if (current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "Algorithm") {
+             advance();
+             methods.push_back(algo_def(tab_expect + 1));
+             if (methods.back()->get_type() == NODE_ERROR) return methods.back();
+        } else {
+             // Unexpected token or end of block?
+             // If it's a newline, loop continues.
+             // If it's something else, might be error.
+             if (current_tok->get_type() != TOKEN_NEWLINE && current_tok->get_type() != TOKEN_NONE) {
+                 std::string error_msg = Color(0xFF, 0x39, 0x6E).get() + "Expected identifier or Algorithm inside struct\n" RESET;
+                 std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
+                 return std::make_shared<ErrorNode>(error_token);
+             }
+        }
+    }
+    return std::make_shared<StructDefNode>(struct_name, members, methods);
 }

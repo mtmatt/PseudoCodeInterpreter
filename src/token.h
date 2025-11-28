@@ -47,6 +47,7 @@ const std::string TOKEN_RIGHT_BRACE{"RBRACE"};
 const std::string TOKEN_LEFT_SQUARE{"LSQUARE"};
 const std::string TOKEN_RIGHT_SQUARE{"RSQUARE"};
 const std::string TOKEN_DOT{"DOT"};
+const std::string TOKEN_SCOPE_RES{"SCOPERES"};
 // Error
 const std::string TOKEN_ERROR{"ERROR"};
 // Multiline

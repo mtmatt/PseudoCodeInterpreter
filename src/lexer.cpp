@@ -23,7 +23,7 @@ TokenList Lexer::make_tokens() {
             tokens.push_back(make_number());
             continue;
         }
-        if(std::isalpha(current_char)) {
+        if(std::isalpha(current_char) || current_char == '_') {
             tokens.push_back(make_identifier());
             continue;
         }
@@ -64,10 +64,18 @@ TokenList Lexer::make_tokens() {
             advance(); break;
             
             case '+': case '-': case '*': case '/': case '%': case '^': case '(': case ')':
-            case '=': case ',': case ':': case '{': case '}': case '[': case ']': case ';':
+            case '=': case ',': case '{': case '}': case '[': case ']': case ';':
             case '.':
             tokens.push_back(std::make_shared<Token>(TO_TOKEN_TYPE.at(current_char), pos));
             advance(); break;
+            case ':':
+            advance();
+            if(current_char == ':') {
+                tokens.push_back(std::make_shared<Token>(TOKEN_SCOPE_RES, pos));
+                advance();
+            } else {
+                tokens.push_back(std::make_shared<Token>(TOKEN_COLON, pos));
+            } break;
             case '<':
             advance();
             if(current_char == '-') {

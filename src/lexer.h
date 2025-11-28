@@ -29,7 +29,8 @@ const std::set<std::string> KEYWORDS{
     "for", "to", "step", "while", "do",
     "repeat", "until",
     "if", "then", "else", 
-    "Algorithm", "continue", "break"
+    "Algorithm", "continue", "break",
+    "Struct", "self", "operator"
 };
 
 const std::map<std::string, int64_t> BUILTIN_CONST{
