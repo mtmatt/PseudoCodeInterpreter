@@ -215,6 +215,8 @@ std::shared_ptr<Node> Parser::if_expr(int tab_expect) {
         } else {
             els = statement(tab_expect + 1);
         }
+        for(auto node : els)
+            if(node->get_type() == NODE_ERROR) return node;
     } else if(has_newline) {
         while(current_tok->get_type() != TOKEN_NEWLINE) {
             back();
