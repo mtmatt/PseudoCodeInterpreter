@@ -1,0 +1,16 @@
+Algorithm IsValidParentheses(s):
+    stack <- {}
+    for i <- 1 to s.size() do
+        char <- s[i]
+        if char = "(" or char = "{" or char = "[" then
+            stack.push(char)
+        else
+            if stack.size() = 0
+                return false
+            top <- stack.pop()
+            if (char = ")" and top != "(") or (char = "}" and top != "{") or (char = "]" and top != "[") then
+                return false
+    return stack.size() = 0
+
+print(IsValidParentheses({"(", ")", "{", "}", "[", "}"}))
+print(IsValidParentheses({"(", ")", "{", "}", "[", "]"}))

@@ -2,7 +2,7 @@ VPATH = src
 CC = g++
 CPPFLAGS = -std=c++17 -O2
 TARGET = shell
-SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/symboltable.cpp src/interpreter.cpp src/pseudo.cpp src/shell.cpp
+SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/symboltable.cpp src/interpreter.cpp src/pseudo.cpp src/shell.cpp src/error.cpp
 BUILD_DIR = build
 OBJS = $(SRCS:src/%.cpp=$(BUILD_DIR)/%.o)
 
