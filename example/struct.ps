@@ -1,0 +1,20 @@
+Algorithm abs(a):
+    if a >= 0 then a else -a
+
+Struct Position:
+    x
+    y
+    Algorithm Position constructor(x_val, y_val):
+        self.x <- x_val
+        self.y <- y_val
+    Algorithm distance_to(other):
+        dx <- abs(self.x - other.x)
+        dy <- abs(self.y - other.y)
+        return (dx^2 + dy^2) ^ 0.5
+
+print("Creating two Position instances:")
+p1 <- Position(3, 4)
+p2 <- Position(7, 1)
+dist <- p1.distance_to(p2)
+print("Distance: ")
+print(dist)
