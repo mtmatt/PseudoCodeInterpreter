@@ -3,6 +3,7 @@
 #include "interpreter.h"
 #include "node.h"
 #include "value.h"
+#include "error.h"
 #include <cmath>
 #include <iostream>
 #include <sstream>
@@ -665,17 +666,39 @@ std::string run(std::string file_name, std::string text,
   TokenList tokens = lexer.make_tokens();
   if (tokens.empty())
     return "";
-  if (tokens[0]->get_type() == TOKEN_ERROR)
-    std::cout << "Tokens: " << tokens << "\n";
+  if (tokens[0]->get_type() == TOKEN_ERROR) {
+    // std::cout << "Tokens: " << tokens << "\n";
+    // Detailed Lexer Error?
+    // Lexer returns TOKEN_ERROR in list.
+    // But lexer usually returns a list with one error token if it fails?
+    // Or a list where some tokens are errors.
+    // Check lexer.cpp.
+    // Lexer::make_tokens() returns a list. If error, it pushes ErrorToken.
+    // Let's iterate and find errors.
+    for (auto tok : tokens) {
+        if (tok->get_type() == TOKEN_ERROR) {
+             std::cout << "Error: " << tok->get_value() << ", line " << tok->get_pos().line + 1 << ", column: " << tok->get_pos().column << "\n";
+             std::cout << error_marker(text, tok->get_pos(), tok->get_pos());
+             return "ABORT";
+        }
+    }
+  }
 
   Parser parser(tokens);
   NodeList ast = parser.parse();
 
   for (auto node : ast) {
-    if(node->get_type() == NODE_ERROR)
-    std::cout << "Nodes: " << node->get_node() << "\n";
-    if (node->get_type() == NODE_ERROR)
+    if(node->get_type() == NODE_ERROR) {
+      // std::cout << "Nodes: " << node->get_node() << "\n";
+      std::shared_ptr<Token> err_tok = node->get_tok();
+      if(err_tok) {
+          std::cout << "Error: " << err_tok->get_value() << ", line " << err_tok->get_pos().line + 1 << ", column: " << err_tok->get_pos().column << "\n";
+          std::cout << error_marker(text, err_tok->get_pos(), err_tok->get_pos());
+      } else {
+          std::cout << "Error: " << node->get_node() << "\n";
+      }
       return "ABORT";
+    }
   }
 
   Interpreter interpreter(global_symbol_table);
