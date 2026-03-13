@@ -1,54 +1,59 @@
 # PseudoCodeInterpreter
 
-Let's make the pseudo code an actual programming language.
+Transform pseudo-code into an executable programming language.
 
-## Data Type
+## Data Types
 
-### Int
-
-- A common 64 bit integer.
+### Integer
+- A standard 64-bit integer.
 
 ### Float
-
-- A common 64 bit floating point number.
+- A standard 64-bit floating-point number.
 
 ### String
-
-- `"This is the string"` : We use the quoatation mark to wrap a string.
-- `"\""` : This would be considered as `"`
-- `"\n"` : Newline
-- `"\r"` : Back to first place of the current line
-- `"\\"` : This would be considered as a `\`
+- `"This is a string"`: Strings are wrapped in double quotation marks.
+- `"\""`: Escaped double quote (`"`).
+- `"\n"`: Newline.
+- `"\r"`: Carriage return (moves the cursor to the beginning of the line).
+- `"\\"`: Escaped backslash (`\`).
 
 ### Array
+- **Initialization**: `arr <- {1, 2, 3}`
+- Arrays are **1-indexed**.
+- Elements of different data types can be stored in the same array.
 
-- `Initialize by` : `arr <- {1, 2, 3}`
-- `Index count from 1`
-- `You can put whatever data type you want into array`
+## Built-in Functions
 
-## Built in Functions
+- `print(s)` : Prints the data to the console.
+- `read()` : Reads a single string separated by space, tab, or newline.
+- `read_line()` : Reads an entire line and returns it as a string.
+- `clear()` : Clears the terminal screen.
+- `quit()` : Exits the interpreter.
+- `int(v)`, `float(v)`, `string(v)` : Type conversion functions.
 
-- `print(s)` : print the data
-- `read()` : read one string saperate by space, tab, and newline
-- `read_line()` : read one line and return string
-- `clear()` : clear the screen
-- `quit()` : quit the interpreter
-- `int/flaot/string(v)` : data convertion
+## Expressions & Syntax
 
-## Expersion For User
+### Operators
+- `a <- 10` : Assignment (assigns the value `10` to the variable `a`).
+- `+` : Addition 
+- `-` : Subtraction
+- `*` : Multiplication
+- `/` : Division
+- `%` : Modulo operation
+- `^` : Power (exponentiation)
+- `=` : Equality comparison
+- `!=` : Inequality comparison
+- `<` : Less than
+- `>` : Greater than
+- `<=` : Less than or equal to
+- `>=` : Greater than or equal to
+- `and` : Logical AND
+- `or` : Logical OR
+- `not` : Logical NOT
 
-### Operators and Operations
+### Control Structures
 
-- `a <- 10` : move the value 10 to the variable `a`
-- `+` : addition 
-- `-` : subtraction
-- `*` : multiplication
-- `/` : division
-- `%` : mod operation
-- `^` : power operation
-
-### if statement
-
+#### If Statement
 - `if condition then expression`
 - `if condition then expression else expression`
 
@@ -61,69 +66,109 @@ else
     a <- 8
 ```
 
-### for statement
-
-- `for var_name <- start_value to end_value do expr`
+#### For Statement
+- `for var_name <- start_value to end_value [step value] do expr`
 
 ```pseudo
 for i <- 1 to 10 do 
     i <- i + 1
+
 for i <- 1 to 100 step 10 do
     i <- i + 1
 ```
 
-### while statement
-
+#### While Statement
 - `while condition do expr`
 
 ```pseudo
-while i < 100 and i > 10
+while i < 100 and i > 10 do
     i <- i * 2
     i <- i * 3 - 1
 ```
 
-### repeat statement
-
+#### Repeat Statement
 - `repeat expr until condition`
 
 ```pseudo
 repeat i <- i * 2 until i > 1000
 ```
 
-### Function
+### Functions
 
-Function begin with `Algorithm`, an example for adding two number would be
+Functions begin with the `Algorithm` keyword. An example of adding two numbers:
 
 ```pseudo
 Algorithm add(a, b):
     return a + b
 ```
 
-### Expression Rule
+### Structs
 
-- `statement :`
-    - NEWLINE* expr (NEWLINE (TAB)_correct_amount expr)* NEWLINE
-    - SEMICOLON* expr (SEMICOLON expr)* SEMICOLON
+You can define custom data structures with properties and methods using the `Struct` keyword. Class attributes are declared at the beginning of the struct, and methods can be defined either inside or outside the structure block. You can use the scope resolution operator `::` to define methods outside the block.
 
-- `expr :`
+```pseudo
+Struct List:
+    head
+    tail
+
+    Algorithm List constructor(_head, _tail):
+        self.head <- _head
+        self.tail <- _tail
+
+    Algorithm List destructor():
+        print("Destroying List instance")
+
+    Algorithm get_head():
+        return self.head
+
+    Algorithm set_head(h):
+        self.head <- h
+
+Algorithm List::test():
+    print(self.head)
+    print(self.tail)
+```
+
+**Usage**
+
+You can instantiate a struct by calling its name like a function, passing the necessary arguments to its constructor. Properties and methods are accessed using standard dot (`.`) notation.
+
+```pseudo
+Algorithm main():
+    l <- List(1, 2)
+    print(l.head)
+    
+    l.set_head(10)
+    print(l.get_head())
+    
+    l.test()
+```
+
+## Language Formal Grammar
+
+- **`statement`** :
+    - `NEWLINE* expr (NEWLINE TAB_correct_amount expr)* NEWLINE`
+    - `SEMICOLON* expr (SEMICOLON expr)* SEMICOLON`
+
+- **`expr`** :
     - `comp-expr ((and|or) comp-expr)*`
-- `comp-expr :`
+- **`comp-expr`** :
     - `not comp-expr`
     - `arith-expr ((EQUAL|NEQ|LESS|GREATER|LEQ|GEQ) arith-expr)*`
-- `arith-expr :`
+- **`arith-expr`** :
     - `term ((ADD|SUB) term)*`
-- `term :`
+- **`term`** :
     - `factor ((MUL|DIV|MOD) factor)*`
-- `factor :`
+- **`factor`** :
     - `(ADD|SUB) factor`
     - `power`
-- `power :`
+- **`power`** :
     - `call (POW factor)*`
-- `call :`
+- **`call`** :
     - `atom (LEFT_PAREN expr (COMMA expr)* RIGHT_PAREN)?`
     - `array-access`
-- `atom :`
-    - `INT|FLOAT|STRING`
+- **`atom`** :
+    - `INT | FLOAT | STRING`
     - `IDENTIFIER (ASSIGN expr)?`
     - `LEFT_PAREN expr RIGHT_PAREN`
     - `array-expr`
@@ -132,17 +177,17 @@ Algorithm add(a, b):
     - `while-expr`
     - `repeat-expr`
     - `algo-def`
-- `array-access :`
+- **`array-access`** :
     - `atom LEFT_SQUARE expr RIGHT_SQUARE`
-- `array-expr :`
-    - LEFT_BRACE (expr (COMMA expr)*)? RIGHT_BRACE
-- `if-expr :`
+- **`array-expr`** :
+    - `LEFT_BRACE (expr (COMMA expr)*)? RIGHT_BRACE`
+- **`if-expr`** :
     - `if expr then expr (else (if-expr|expr))?`
-- `for-expr :`
+- **`for-expr`** :
     - `for IDENTIFIER ASSIGN expr to expr (step)? expr do expr`    
-- `while-expr :`
+- **`while-expr`** :
     - `while expr do expr`
-- `repeat-expr :`
+- **`repeat-expr`** :
     - `repeat expr until expr`
-- `algo-def`
-    - `Algorithm IDENTIFIER? LEFT_PAREN (IDENTIFIER (COMMA IDENTIFIER)*)?  RIGHT_PAREN COLON expr`
+- **`algo-def`** :
+    - `Algorithm IDENTIFIER? LEFT_PAREN (IDENTIFIER (COMMA IDENTIFIER)*)? RIGHT_PAREN COLON expr`
