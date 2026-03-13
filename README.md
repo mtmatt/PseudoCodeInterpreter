@@ -1,6 +1,6 @@
 # PseudoCodeInterpreter
 
-Let's make the pseudo code a actual programming language.
+Let's make the pseudo code an actual programming language.
 
 ## Data Type
 
