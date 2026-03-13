@@ -22,7 +22,7 @@ Let's make the pseudo code an actual programming language.
 
 ### Array
 
-- `Initialize by` : `var arr <- {1, 2, 3}`
+- `Initialize by` : `arr <- {1, 2, 3}`
 - `Index count from 1`
 - `You can put whatever data type you want into array`
 
