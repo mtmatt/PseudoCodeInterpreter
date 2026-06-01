@@ -12,6 +12,48 @@
 #include <string>
 #include <algorithm>
 
+namespace {
+const Grammar CFG{
+    {GrammarProduction::Statement, "statement -> NEWLINE* expr (separator expr)*"},
+    {GrammarProduction::Expr, "expr -> comp-expr ((and | or) comp-expr)*"},
+    {GrammarProduction::CompExpr, "comp-expr -> not comp-expr | arith-expr ((= | != | < | > | <= | >=) arith-expr)*"},
+    {GrammarProduction::ArithExpr, "arith-expr -> term ((+ | -) term)*"},
+    {GrammarProduction::Term, "term -> factor ((* | / | %) factor)*"},
+    {GrammarProduction::Factor, "factor -> (+ | -) factor | power"},
+    {GrammarProduction::Power, "power -> call (^ factor)*"},
+    {GrammarProduction::Call, "call -> atom (member-access | call-args | index | assignment)*"},
+    {GrammarProduction::Atom, "atom -> literal | identifier | group | array | if | for | while | repeat | algorithm | struct | return"},
+    {GrammarProduction::ArrayExpr, "array -> { (expr (, expr)*)? }"},
+    {GrammarProduction::IfExpr, "if -> if expr then block (else (if | block))?"},
+    {GrammarProduction::ForExpr, "for -> for identifier <- expr to expr (step expr)? do block"},
+    {GrammarProduction::WhileExpr, "while -> while expr do block"},
+    {GrammarProduction::RepeatExpr, "repeat -> repeat block until expr"},
+    {GrammarProduction::AlgoDef, "algorithm -> Algorithm name? (args?) : block"},
+    {GrammarProduction::StructDef, "struct -> Struct identifier : struct-body"},
+};
+}
+
+const Grammar& Parser::grammar() {
+    return CFG;
+}
+
+bool Parser::match_type(const std::string& token_type) const {
+    return current_tok->get_type() == token_type;
+}
+
+bool Parser::match_value(const std::string& token_value) const {
+    return current_tok->get_value() == token_value;
+}
+
+bool Parser::match_keyword(const std::string& keyword) const {
+    return match_type(TOKEN_KEYWORD) && match_value(keyword);
+}
+
+std::shared_ptr<Node> Parser::parse_error(const std::string& message) {
+    std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), message);
+    return std::make_shared<ErrorNode>(error_token);
+}
+
 std::shared_ptr<Token> Parser::advance() {
     tok_index++;
     if(tok_index >= 0 && tok_index < tokens.size())
@@ -31,6 +73,7 @@ std::shared_ptr<Token> Parser::back() {
 }
 
 std::shared_ptr<Node> Parser::atom(int tab_expect) {
+    // atom -> literal | identifier | group | array | if | for | while | repeat | algorithm | struct | return
     std::shared_ptr<Token> tok = current_tok;
     std::string error_msg{"Not an atom, found \""};
     if(tok->isnumber()) {
@@ -65,31 +108,31 @@ std::shared_ptr<Node> Parser::atom(int tab_expect) {
             return std::make_shared<VarAssignNode>(tok->get_value(), ret);
         }
         return std::make_shared<VarAccessNode>(tok);
-    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "self") {
+    } else if(match_keyword("self")) {
         advance();
         return std::make_shared<VarAccessNode>(tok);
-    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "if") {
+    } else if(match_keyword("if")) {
         advance();
         return if_expr(tab_expect);
-    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "for") {
+    } else if(match_keyword("for")) {
         advance();
         return for_expr(tab_expect);
-    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "while") {
+    } else if(match_keyword("while")) {
         advance();
         return while_expr(tab_expect);
-    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "repeat") {
+    } else if(match_keyword("repeat")) {
         advance();
         return repeat_expr(tab_expect);
-    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "Algorithm") {
+    } else if(match_keyword("Algorithm")) {
         advance();
         return algo_def(tab_expect);
-    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "Struct") {
+    } else if(match_keyword("Struct")) {
         advance();
         return struct_def(tab_expect);
     } else if(tok->get_type() == TOKEN_LEFT_BRACE) {
         advance();
         return array_expr(tab_expect);
-    } else if(tok->get_type() == TOKEN_KEYWORD && tok->get_value() == "return") {
+    } else if(match_keyword("return")) {
         advance();
         if (current_tok->get_type() == TOKEN_NEWLINE || current_tok->get_type() == TOKEN_SEMICOLON) {
              return std::make_shared<ReturnNode>(std::make_shared<ValueNode>(std::make_shared<Token>(TOKEN_BUILTIN_CONST, tok->get_pos()))); // Return NONE
@@ -105,6 +148,7 @@ std::shared_ptr<Node> Parser::atom(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::factor(int tab_expect) {
+    // factor -> (+ | -) factor | power
     std::shared_ptr<Token> tok = current_tok;
     if(tok->get_type() == TOKEN_ADD || tok->get_type() == TOKEN_SUB) {
         advance();
@@ -114,6 +158,7 @@ std::shared_ptr<Node> Parser::factor(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::term(int tab_expect) {
+    // term -> factor ((* | / | %) factor)*
     return bin_op(
         tab_expect,
         std::bind(&Parser::factor, this, tab_expect), 
@@ -122,6 +167,7 @@ std::shared_ptr<Node> Parser::term(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::expr(int tab_expect) {
+    // expr -> comp-expr ((and | or) comp-expr)*
     return bin_op(
         tab_expect,
         std::bind(&Parser::comp_expr, this, tab_expect), 
@@ -130,8 +176,9 @@ std::shared_ptr<Node> Parser::expr(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::comp_expr(int tab_expect) {
+    // comp-expr -> not comp-expr | arith-expr ((= | != | < | > | <= | >=) arith-expr)*
     std::shared_ptr<Token> tok = current_tok;
-    if(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "not") {
+    if(match_keyword("not")) {
         advance();
         std::shared_ptr<Node> ret = comp_expr(tab_expect);
         if(ret->get_type() == NODE_ERROR) return ret;
@@ -145,6 +192,7 @@ std::shared_ptr<Node> Parser::comp_expr(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::arith_expr(int tab_expect) {
+    // arith-expr -> term ((+ | -) term)*
     return bin_op(
         tab_expect,
         std::bind(&Parser::term, this, tab_expect), 
@@ -153,6 +201,7 @@ std::shared_ptr<Node> Parser::arith_expr(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::array_expr(int tab_expect) {
+    // array -> { (expr (, expr)*)? }
     NodeList ret;
     if(current_tok->get_type() == TOKEN_RIGHT_BRACE) {
         advance();
@@ -175,9 +224,10 @@ std::shared_ptr<Node> Parser::array_expr(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::if_expr(int tab_expect) {
+    // if -> if expr then block (else (if | block))?
     std::shared_ptr<Node> condition = expr(tab_expect);
     if(condition->get_type() == NODE_ERROR) return condition;
-    if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "then")) {
+    if(!match_keyword("then")) {
         std::string error_msg = "Expected \"then\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
@@ -207,9 +257,9 @@ std::shared_ptr<Node> Parser::if_expr(int tab_expect) {
         }
         has_newline = true;
     }
-    if(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "else") {
+    if(match_keyword("else")) {
         advance();
-        if(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "if") {
+        if(match_keyword("if")) {
             advance();
             els = NodeList{if_expr(tab_expect)};
         } else {
@@ -226,6 +276,7 @@ std::shared_ptr<Node> Parser::if_expr(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::for_expr(int tab_expect) {
+    // for -> for identifier <- expr to expr (step expr)? do block
     std::shared_ptr<Token> var_name = current_tok;
     if(current_tok->get_type() != TOKEN_IDENTIFIER) {
         std::string error_msg = "Expected \"an identifier\"";
@@ -243,7 +294,7 @@ std::shared_ptr<Node> Parser::for_expr(int tab_expect) {
     if(start_value->get_type() == NODE_ERROR) return start_value;
     std::shared_ptr<Node> var_assign = std::make_shared<VarAssignNode>(var_name->get_value(), start_value);
     
-    if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "to")) {
+    if(!match_keyword("to")) {
         std::string error_msg = "Expected \"to\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
@@ -253,12 +304,12 @@ std::shared_ptr<Node> Parser::for_expr(int tab_expect) {
     if(end_value->get_type() == NODE_ERROR) return end_value;
 
     std::shared_ptr<Node> step_value = nullptr;
-    if(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "step") {
+    if(match_keyword("step")) {
         advance();
         step_value = expr(tab_expect);
         if(step_value->get_type() == NODE_ERROR) return step_value;
     }
-    if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "do")) {
+    if(!match_keyword("do")) {
         std::string error_msg = "Expected \"do\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
@@ -271,9 +322,10 @@ std::shared_ptr<Node> Parser::for_expr(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::while_expr(int tab_expect) {
+    // while -> while expr do block
     std::shared_ptr<Node> condition = expr(tab_expect);
     if(condition->get_type() == NODE_ERROR) return condition;
-    if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "do")) {
+    if(!match_keyword("do")) {
         std::string error_msg = "Expected \"do\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
@@ -286,10 +338,11 @@ std::shared_ptr<Node> Parser::while_expr(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::repeat_expr(int tab_expect) {
+    // repeat -> repeat block until expr
     NodeList body_node = statement(tab_expect + 1);
     for(auto node : body_node)
         if(node->get_type() == NODE_ERROR) return node;
-    if(!(current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "until")) {
+    if(!match_keyword("until")) {
         std::string error_msg = "Expected \"until\"";
         std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
         return std::make_shared<ErrorNode>(error_token);
@@ -301,6 +354,7 @@ std::shared_ptr<Node> Parser::repeat_expr(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
+    // algorithm -> Algorithm name? (args?) : block
     std::shared_ptr<Token> algo_name = current_tok;
     if(current_tok->get_type() == TOKEN_IDENTIFIER) {
         advance();
@@ -367,7 +421,7 @@ std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
             std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
             return std::make_shared<ErrorNode>(error_token);
         }
-    } else if (current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "operator") {
+    } else if (match_keyword("operator")) {
         // Operator overloading
         advance();
         std::string op_name = "operator ";
@@ -432,6 +486,7 @@ std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::pow(int tab_expect) {
+    // power -> call (^ factor)*
     return bin_op(
         tab_expect,
         std::bind(&Parser::call, this, tab_expect), 
@@ -439,6 +494,7 @@ std::shared_ptr<Node> Parser::pow(int tab_expect) {
 }
 
 std::shared_ptr<Node> Parser::call(int tab_expect) {
+    // call -> atom (member-access | call-args | index | assignment)*
     std::shared_ptr<Node> at{atom(tab_expect)};
     if(at->get_type() == NODE_ERROR) return at;
     while(current_tok->get_type() == TOKEN_DOT) {
@@ -535,6 +591,7 @@ std::shared_ptr<Node> Parser::bin_op(
 }
 
 NodeList Parser::statement(int tab_expect) {
+    // statement -> NEWLINE* expr (separator expr)*
     NodeList ret;
     do {
         while(current_tok->get_type() == TOKEN_NEWLINE) {
@@ -610,7 +667,10 @@ NodeList Parser::statement(int tab_expect) {
 NodeList Parser::parse() {
     NodeList ret = statement(0);
     return ret;
-}std::shared_ptr<Node> Parser::struct_def(int tab_expect) {
+}
+
+std::shared_ptr<Node> Parser::struct_def(int tab_expect) {
+    // struct -> Struct identifier : struct-body
     std::shared_ptr<Token> struct_name = current_tok;
     if (current_tok->get_type() != TOKEN_IDENTIFIER) {
         std::string error_msg = "Expected an identifier";
@@ -664,7 +724,7 @@ NodeList Parser::parse() {
             // If it is an identifier, it is a member.
             members.push_back(current_tok);
             advance();
-        } else if (current_tok->get_type() == TOKEN_KEYWORD && current_tok->get_value() == "Algorithm") {
+        } else if (match_keyword("Algorithm")) {
              advance();
              methods.push_back(algo_def(tab_expect + 1));
              if (methods.back()->get_type() == NODE_ERROR) return methods.back();
