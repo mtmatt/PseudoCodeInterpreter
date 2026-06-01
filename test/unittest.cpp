@@ -245,6 +245,8 @@ TEST(InterpreterTest, TestArray) {
     check_interpreter("a <- {1, 2, 3}; a.push(4)", "4");
     // pop returns popped value -> 3
     check_interpreter("a <- {1, 2, 3}; a.pop()", "3");
+    // Array method arguments are evaluated in a call-local scope.
+    check_interpreter("x <- 1; a <- {}; a.push(x <- 2); x", "1");
 }
 
 TEST(InterpreterTest, TestBuiltin) {
