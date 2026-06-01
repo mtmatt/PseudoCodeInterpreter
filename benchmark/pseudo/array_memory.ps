@@ -1,0 +1,10 @@
+n <- 50000
+arr <- {}
+arr.resize(n)
+for i <- 1 to n do
+    arr[i] <- (i * 13) % 1009
+
+sum <- 0
+for i <- 1 to n do
+    sum <- (sum + arr[i]) % 1000000007
+print(sum)
