@@ -48,9 +48,6 @@ template <typename T> int64_t TypedValue<T>::as_int() {
   } else if constexpr (std::is_same_v<T, double>) {
     return static_cast<int64_t>(value);
   } else {
-    if (value.empty()) {
-      return 0;
-    }
     return std::stoll(value);
   }
 }
@@ -61,9 +58,6 @@ template <typename T> double TypedValue<T>::as_double() {
   } else if constexpr (std::is_same_v<T, int64_t>) {
     return static_cast<double>(value);
   } else {
-    if (value.empty()) {
-      return 0.0;
-    }
     return std::stod(value);
   }
 }

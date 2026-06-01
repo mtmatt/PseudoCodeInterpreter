@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.14
 import argparse
 import os
+import platform
 import re
 import shutil
 import statistics
@@ -39,7 +40,9 @@ def parse_args():
 
 
 def run_command(command):
-    time_bin = shutil.which("time")
+    time_bin = "/usr/bin/time" if platform.system() == "Darwin" else None
+    if time_bin and not Path(time_bin).exists():
+        time_bin = shutil.which("time")
     if time_bin:
         wrapped = [time_bin, "-l", *command]
         start = time.perf_counter()
