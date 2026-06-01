@@ -9,6 +9,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <cstdint>
 #include "node.h"
 
 const std::string VALUE_NONE{"NONE"};
@@ -38,6 +39,9 @@ public:
     virtual std::string get_num() { return type;}
     virtual std::string repr() { return type;}
     virtual std::string get_type(){ return type;}
+    virtual int64_t as_int();
+    virtual double as_double();
+    virtual std::string as_string();
     virtual std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr)
         { return std::make_shared<Value>();};
     friend std::ostream& operator<<(std::ostream &out, Value &token);
@@ -55,6 +59,9 @@ public:
         : Value(_type), value(_value) {}
     std::string get_num() override;
     std::string repr() override;
+    int64_t as_int() override;
+    double as_double() override;
+    std::string as_string() override;
 
 protected:
     T value;

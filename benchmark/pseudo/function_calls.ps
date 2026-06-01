@@ -1,0 +1,8 @@
+Algorithm mix(x):
+    return (x * 3 + 7) % 1000003
+
+n <- 60000
+acc <- 1
+for i <- 1 to n do
+    acc <- mix(acc + i)
+print(acc)

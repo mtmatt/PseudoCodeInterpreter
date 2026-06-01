@@ -12,6 +12,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 /// --------------------
@@ -23,6 +24,12 @@ std::ostream &operator<<(std::ostream &out, Value &number) {
   return out;
 }
 
+int64_t Value::as_int() { return std::stoll(get_num()); }
+
+double Value::as_double() { return std::stod(get_num()); }
+
+std::string Value::as_string() { return get_num(); }
+
 template <typename T> std::string TypedValue<T>::get_num() {
   std::stringstream ss;
   std::string ret;
@@ -33,6 +40,40 @@ template <typename T> std::string TypedValue<T>::get_num() {
     ret = value;
   }
   return ret;
+}
+
+template <typename T> int64_t TypedValue<T>::as_int() {
+  if constexpr (std::is_same_v<T, int64_t>) {
+    return value;
+  } else if constexpr (std::is_same_v<T, double>) {
+    return static_cast<int64_t>(value);
+  } else {
+    if (value.empty()) {
+      return 0;
+    }
+    return std::stoll(value);
+  }
+}
+
+template <typename T> double TypedValue<T>::as_double() {
+  if constexpr (std::is_same_v<T, double>) {
+    return value;
+  } else if constexpr (std::is_same_v<T, int64_t>) {
+    return static_cast<double>(value);
+  } else {
+    if (value.empty()) {
+      return 0.0;
+    }
+    return std::stod(value);
+  }
+}
+
+template <typename T> std::string TypedValue<T>::as_string() {
+  if constexpr (std::is_same_v<T, std::string>) {
+    return value;
+  } else {
+    return get_num();
+  }
 }
 
 template <typename T> std::string TypedValue<T>::repr() {
@@ -225,7 +266,7 @@ std::shared_ptr<Value> BoundMethodValue::execute(NodeList args,
       }
       long long new_size;
       try {
-        new_size = std::stoll(new_size_val->get_num());
+        new_size = new_size_val->as_int();
       } catch (const std::out_of_range &oor) {
         return std::make_shared<ErrorValue>(VALUE_ERROR,
                                             "Resize argument out of range\n");
@@ -364,13 +405,13 @@ std::shared_ptr<Value> operator+(std::shared_ptr<Value> a,
                                  std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<double>>(
-        VALUE_FLOAT, std::stod(a->get_num()) + std::stod(b->get_num()));
+        VALUE_FLOAT, a->as_double() + b->as_double());
   else if (a->get_type() == VALUE_INT && b->get_type() == VALUE_INT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) + std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() + b->as_int());
   else if (a->get_type() == VALUE_STRING && b->get_type() == VALUE_STRING)
     return std::make_shared<TypedValue<std::string>>(
-        VALUE_STRING, a->get_num() + b->get_num());
+        VALUE_STRING, a->as_string() + b->as_string());
   else
     return std::make_shared<ErrorValue>(
         VALUE_ERROR, Color(0xFF, 0x39, 0x6E).get() +
@@ -382,10 +423,10 @@ std::shared_ptr<Value> operator-(std::shared_ptr<Value> a,
                                  std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<double>>(
-        VALUE_FLOAT, std::stod(a->get_num()) - std::stod(b->get_num()));
+        VALUE_FLOAT, a->as_double() - b->as_double());
   else if (a->get_type() == VALUE_INT && b->get_type() == VALUE_INT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) - std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() - b->as_int());
   else
     return std::make_shared<ErrorValue>(
         VALUE_ERROR,
@@ -397,13 +438,13 @@ std::shared_ptr<Value> operator*(std::shared_ptr<Value> a,
                                  std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<double>>(
-        VALUE_FLOAT, std::stod(a->get_num()) * std::stod(b->get_num()));
+        VALUE_FLOAT, a->as_double() * b->as_double());
   else if (a->get_type() == VALUE_INT && b->get_type() == VALUE_INT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) * std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() * b->as_int());
   else if (a->get_type() == VALUE_STRING && b->get_type() == VALUE_INT) {
-    std::string ret, str_a{a->get_num()};
-    int64_t times{stoll(b->get_num())};
+    std::string ret, str_a{a->as_string()};
+    int64_t times{b->as_int()};
     for (int i{0}; i < times; ++i)
       ret += str_a;
     return std::make_shared<TypedValue<std::string>>(VALUE_STRING, ret);
@@ -416,16 +457,16 @@ std::shared_ptr<Value> operator*(std::shared_ptr<Value> a,
 
 std::shared_ptr<Value> operator/(std::shared_ptr<Value> a,
                                  std::shared_ptr<Value> b) {
-  if (std::stod(b->get_num()) == 0.0)
+  if (b->as_double() == 0.0)
     return std::make_shared<ErrorValue>(VALUE_ERROR,
                                         Color(0xFF, 0x39, 0x6E).get() +
                                             "Runtime ERROR: DIV by 0\n" RESET);
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<double>>(
-        VALUE_FLOAT, std::stod(a->get_num()) / std::stod(b->get_num()));
+        VALUE_FLOAT, a->as_double() / b->as_double());
   else if (a->get_type() == VALUE_INT && b->get_type() == VALUE_INT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) / std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() / b->as_int());
   else
     return std::make_shared<ErrorValue>(
         VALUE_ERROR,
@@ -440,79 +481,79 @@ std::shared_ptr<Value> operator%(std::shared_ptr<Value> a,
         VALUE_ERROR, Color(0xFF, 0x39, 0x6E).get() +
                          "Cannot apply \"%\" operation on float\n" RESET);
   return std::make_shared<TypedValue<int64_t>>(
-      VALUE_INT, std::stoll(a->get_num()) % std::stoll(b->get_num()));
+      VALUE_INT, a->as_int() % b->as_int());
 }
 
 std::shared_ptr<Value> operator==(std::shared_ptr<Value> a,
                                   std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stod(a->get_num()) == std::stod(b->get_num()));
+        VALUE_INT, a->as_double() == b->as_double());
   else
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT,
-                                                 a->get_num() == b->get_num());
+                                                 a->as_string() == b->as_string());
 }
 
 std::shared_ptr<Value> operator!=(std::shared_ptr<Value> a,
                                   std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stod(a->get_num()) != std::stod(b->get_num()));
+        VALUE_INT, a->as_double() != b->as_double());
   else
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT,
-                                                 a->get_num() != b->get_num());
+                                                 a->as_string() != b->as_string());
 }
 
 std::shared_ptr<Value> operator<(std::shared_ptr<Value> a,
                                  std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stod(a->get_num()) < std::stod(b->get_num()));
+        VALUE_INT, a->as_double() < b->as_double());
   else if (a->get_type() == VALUE_INT && b->get_type() == VALUE_INT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) < std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() < b->as_int());
   else
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT,
-                                                 a->get_num() < b->get_num());
+                                                 a->as_string() < b->as_string());
 }
 
 std::shared_ptr<Value> operator>(std::shared_ptr<Value> a,
                                  std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stod(a->get_num()) > std::stod(b->get_num()));
+        VALUE_INT, a->as_double() > b->as_double());
   else if (a->get_type() == VALUE_INT && b->get_type() == VALUE_INT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) > std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() > b->as_int());
   else
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT,
-                                                 a->get_num() > b->get_num());
+                                                 a->as_string() > b->as_string());
 }
 
 std::shared_ptr<Value> operator<=(std::shared_ptr<Value> a,
                                   std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stod(a->get_num()) <= std::stod(b->get_num()));
+        VALUE_INT, a->as_double() <= b->as_double());
   else if (a->get_type() == VALUE_INT && b->get_type() == VALUE_INT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) <= std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() <= b->as_int());
   else
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT,
-                                                 a->get_num() <= b->get_num());
+                                                 a->as_string() <= b->as_string());
 }
 
 std::shared_ptr<Value> operator>=(std::shared_ptr<Value> a,
                                   std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stod(a->get_num()) >= std::stod(b->get_num()));
+        VALUE_INT, a->as_double() >= b->as_double());
   else if (a->get_type() == VALUE_INT && b->get_type() == VALUE_INT)
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) >= std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() >= b->as_int());
   else
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT,
-                                                 a->get_num() >= b->get_num());
+                                                 a->as_string() >= b->as_string());
 }
 
 std::shared_ptr<Value> operator&&(std::shared_ptr<Value> a,
@@ -520,14 +561,14 @@ std::shared_ptr<Value> operator&&(std::shared_ptr<Value> a,
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
         VALUE_INT,
-        std::stod(a->get_num()) != 0 && std::stod(b->get_num()) != 0);
+        a->as_double() != 0 && b->as_double() != 0);
   else if (a->get_type() == VALUE_INT && b->get_type() == VALUE_INT)
     return std::make_shared<TypedValue<int64_t>>(
         VALUE_INT,
-        std::stoll(a->get_num()) != 0 && std::stoll(b->get_num()) != 0);
+        a->as_int() != 0 && b->as_int() != 0);
   else
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) && std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() && b->as_int());
 }
 
 std::shared_ptr<Value> operator||(std::shared_ptr<Value> a,
@@ -535,43 +576,43 @@ std::shared_ptr<Value> operator||(std::shared_ptr<Value> a,
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
         VALUE_INT,
-        std::stod(a->get_num()) != 0 || std::stod(b->get_num()) != 0);
+        a->as_double() != 0 || b->as_double() != 0);
   else
     return std::make_shared<TypedValue<int64_t>>(
-        VALUE_INT, std::stoll(a->get_num()) || std::stoll(b->get_num()));
+        VALUE_INT, a->as_int() || b->as_int());
 }
 
 std::shared_ptr<Value> operator-(std::shared_ptr<Value> a) {
   if (a->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<double>>(VALUE_FLOAT,
-                                                0 - stod(a->get_num()));
+                                                0 - a->as_double());
   else
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT,
-                                                 0 - stoll(a->get_num()));
+                                                 0 - a->as_int());
 }
 
 std::shared_ptr<Value> operator!(std::shared_ptr<Value> a) {
   if (a->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<double>>(VALUE_FLOAT,
-                                                stod(a->get_num()) == 0);
+                                                a->as_double() == 0);
   else
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT,
-                                                 stoll(a->get_num()) == 0);
+                                                 a->as_int() == 0);
 }
 
 std::shared_ptr<Value> pow(std::shared_ptr<Value> a, std::shared_ptr<Value> b) {
-  if (std::stod(a->get_num()) == 0.0 && std::stod(b->get_num()) == 0.0)
+  if (a->as_double() == 0.0 && b->as_double() == 0.0)
     return std::make_shared<ErrorValue>(
         VALUE_ERROR,
         Color(0xFF, 0x39, 0x6E).get() + "Runtime ERROR: 0 to the 0\n" RESET);
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<double>>(
         VALUE_FLOAT,
-        std::pow(std::stod(a->get_num()), std::stod(b->get_num())));
+        std::pow(a->as_double(), b->as_double()));
   else
     return std::make_shared<TypedValue<int64_t>>(
         VALUE_INT,
-        std::pow(std::stoll(a->get_num()), std::stoll(b->get_num())));
+        std::pow(a->as_int(), b->as_int()));
 }
 
 std::shared_ptr<Value> InstanceValue::get_member(const std::string &name, std::shared_ptr<Value> self) {
