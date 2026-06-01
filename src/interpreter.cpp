@@ -126,7 +126,7 @@ std::shared_ptr<Value>& Interpreter::visit_array_access(std::shared_ptr<Node> no
         return error;
     }
     algo_call_temp = arr;
-    return dynamic_cast<ArrayValue*>(arr.get())->operator[](std::stoll(index->get_num()));
+    return dynamic_cast<ArrayValue*>(arr.get())->operator[](index->as_int());
 }
 
 std::shared_ptr<Value> Interpreter::visit_array_assign(std::shared_ptr<Node> node) {
@@ -214,13 +214,17 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
     std::shared_ptr<Value> end_value = visit(child[1]);
     if(end_value->get_type() == VALUE_ERROR) return end_value;
     std::function<bool(std::shared_ptr<Value>, std::shared_ptr<Value>)> condition;
-    if(stod(step->get_num()) > 0) {
+    if(step->as_double() > 0) {
         condition = [](std::shared_ptr<Value> i, std::shared_ptr<Value> end) -> bool {
-            return std::stoll((i <= end)->get_num()) == 1;
+            if (i->get_type() == VALUE_FLOAT || end->get_type() == VALUE_FLOAT)
+                return i->as_double() <= end->as_double();
+            return i->as_int() <= end->as_int();
         };
-    } else if(std::stod(step->get_num()) < 0) {
+    } else if(step->as_double() < 0) {
         condition = [](std::shared_ptr<Value> i, std::shared_ptr<Value> end) -> bool {
-            return std::stoll((i >= end)->get_num()) == 1;
+            if (i->get_type() == VALUE_FLOAT || end->get_type() == VALUE_FLOAT)
+                return i->as_double() >= end->as_double();
+            return i->as_int() >= end->as_int();
         };
     } else {
         return std::make_shared<ErrorValue>(VALUE_ERROR, "Infinite for loop\n");
@@ -251,7 +255,7 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
 std::shared_ptr<Value> Interpreter::visit_while(std::shared_ptr<Node> node) {
     NodeList child = node->get_child();
     ValueList ret;
-    while(std::stoll(visit(child[0])->get_num()) == 1) {
+    while(visit(child[0])->as_int() == 1) {
         if(child.size() == 2) {
             ret.push_back(visit(child[1]));
             if(ret.back()->get_type() == VALUE_ERROR) 
@@ -282,7 +286,7 @@ std::shared_ptr<Value> Interpreter::visit_repeat(std::shared_ptr<Node> node) {
                     return ret;
             }
         }
-    } while(std::stoll(visit(child[0])->get_num()) == 0);
+    } while(visit(child[0])->as_int() == 0);
     return std::make_shared<ArrayValue>(ret);
 }
 
