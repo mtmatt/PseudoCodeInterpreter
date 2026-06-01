@@ -42,7 +42,7 @@ public:
     virtual int64_t as_int();
     virtual double as_double();
     virtual std::string as_string();
-    virtual std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr)
+    virtual std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr)
         { return std::make_shared<Value>();};
     friend std::ostream& operator<<(std::ostream &out, Value &token);
     
@@ -72,14 +72,19 @@ using ErrorValue = TypedValue<std::string>;
 class BaseAlgoValue: public Value {
 public:
     BaseAlgoValue(const std::string &_algo_name, std::shared_ptr<Node> _value) 
-        : Value(VALUE_ALGO), value(_value), algo_name(_algo_name) {}
+        : Value(VALUE_ALGO), value(_value), algo_name(_algo_name) {
+        for (const auto& tok : value->get_toks()) {
+            arg_names.push_back(tok->get_value());
+        }
+    }
     std::string get_num() override { return algo_name;}
-    virtual std::shared_ptr<Value> set_args(NodeList&, SymbolTable&, Interpreter&);
+    virtual std::shared_ptr<Value> set_args(const NodeList&, SymbolTable&, Interpreter&);
     std::string repr() override { return get_num();}
 
 protected:
     std::string algo_name;
     std::shared_ptr<Node> value;
+    std::vector<std::string> arg_names;
 };
 
 class AlgoValue: public BaseAlgoValue {
@@ -88,7 +93,7 @@ public:
         : BaseAlgoValue(_algo_name, _value) {}
     std::string get_num() override { return algo_name;}
     std::string repr() override { return get_num();}
-    std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr) override;
+    std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr) override;
     friend class BoundMethodValue;
     // Expose value for friends/derived or public use if needed for method binding
     std::shared_ptr<Node> get_node_ptr() { return value; }
@@ -100,7 +105,7 @@ public:
     BuiltinAlgoValue(const std::string &_algo_name, std::shared_ptr<Node> _value) 
         : BaseAlgoValue(_algo_name, _value) {}
     std::string get_num() override { return algo_name;}
-    std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr) override;
+    std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr) override;
     std::shared_ptr<Value> execute_print(const std::string&);
     std::shared_ptr<Value> execute_read();
     std::shared_ptr<Value> execute_read_line();
@@ -116,7 +121,7 @@ class BoundMethodValue : public Value {
 public:
     BoundMethodValue(std::shared_ptr<Value> _obj, std::string _method_name)
         : Value(VALUE_ALGO), obj(_obj), method_name(_method_name) {}
-    std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr) override;
+    std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr) override;
     std::string get_num() override { return method_name; }
     std::string repr() override { return "<Bound Method " + method_name + ">"; }
 protected:
@@ -132,6 +137,7 @@ public:
     std::shared_ptr<Value>& operator[](int p);
     void push_back(std::shared_ptr<Value>);
     std::shared_ptr<Value> pop_back();
+    bool empty() const { return value.empty();}
     std::shared_ptr<Value>& size() { return sz = std::make_shared<TypedValue<int64_t>>(VALUE_INT, value.size());};
     std::shared_ptr<Value>& back() { return value.back();};
     std::string repr() override { return get_num();}
@@ -187,7 +193,7 @@ public:
     std::vector<std::string> members;
     std::map<std::string, std::shared_ptr<Value>> methods;
     std::string name;
-    std::shared_ptr<Value> execute(NodeList args = {}, SymbolTable *parent = nullptr) override;
+    std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr) override;
 };
 
 class InstanceValue : public Value {

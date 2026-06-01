@@ -129,21 +129,20 @@ std::shared_ptr<Value> &ArrayValue::operator[](int p) {
   return error;
 }
 
-std::shared_ptr<Value> BaseAlgoValue::set_args(NodeList &args, SymbolTable &sym,
+std::shared_ptr<Value> BaseAlgoValue::set_args(const NodeList &args, SymbolTable &sym,
                                                Interpreter &interpreter) {
-  if (args.size() < value->get_toks().size()) {
+  if (args.size() < arg_names.size()) {
     return std::make_shared<ErrorValue>(
         VALUE_ERROR, Color(0xFF, 0x39, 0x6E).get() + "Too few arguments" RESET);
-  } else if (args.size() > value->get_toks().size()) {
+  } else if (args.size() > arg_names.size()) {
     return std::make_shared<ErrorValue>(VALUE_ERROR,
                                         Color(0xFF, 0x39, 0x6E).get() +
                                             "Too many arguments" RESET);
   }
 
-  TokenList args_name = value->get_toks();
   for (int i = 0; i < args.size(); ++i) {
     std::shared_ptr<Value> v = interpreter.visit(args[i]);
-    sym.set(args_name[i]->get_value(), v);
+    sym.set(arg_names[i], v);
   }
   return std::make_shared<Value>();
 }
@@ -169,7 +168,7 @@ private:
     SymbolTable& sym;
 };
 
-std::shared_ptr<Value> AlgoValue::execute(NodeList args, SymbolTable *parent) {
+std::shared_ptr<Value> AlgoValue::execute(const NodeList& args, SymbolTable *parent) {
   SymbolTable sym(parent);
   ScopeCleaner cleaner(sym);
   Interpreter interpreter(sym);
@@ -177,7 +176,8 @@ std::shared_ptr<Value> AlgoValue::execute(NodeList args, SymbolTable *parent) {
   if (ret->get_type() == VALUE_ERROR)
     return ret;
 
-  NodeList algo_body = value->get_child();
+  AlgorithmDefNode* algo_node = dynamic_cast<AlgorithmDefNode*>(value.get());
+  const NodeList& algo_body = algo_node->get_body();
 
   for (int i = 0; i < algo_body.size(); ++i) {
     ret = interpreter.visit(algo_body[i]);
@@ -188,7 +188,7 @@ std::shared_ptr<Value> AlgoValue::execute(NodeList args, SymbolTable *parent) {
   return ret;
 }
 
-std::shared_ptr<Value> BuiltinAlgoValue::execute(NodeList args,
+std::shared_ptr<Value> BuiltinAlgoValue::execute(const NodeList& args,
                                                  SymbolTable *parent) {
   SymbolTable sym(parent);
   ScopeCleaner cleaner(sym);
@@ -196,9 +196,8 @@ std::shared_ptr<Value> BuiltinAlgoValue::execute(NodeList args,
   std::shared_ptr<Value> ret{set_args(args, sym, interpreter)};
   if (ret->get_type() == VALUE_ERROR)
     return ret;
-  TokenList args_name = value->get_toks();
   if (algo_name == "print") {
-    return execute_print(sym.get(args_name[0]->get_value())->get_num());
+    return execute_print(sym.get(arg_names[0])->get_num());
   } else if (algo_name == "read") {
     return execute_read();
   } else if (algo_name == "read_line") {
@@ -210,16 +209,16 @@ std::shared_ptr<Value> BuiltinAlgoValue::execute(NodeList args,
   } else if (algo_name == "quit") {
     exit(0);
   } else if (algo_name == "int") {
-    return execute_int(sym.get(args_name[0]->get_value())->get_num());
+    return execute_int(sym.get(arg_names[0])->get_num());
   } else if (algo_name == "float") {
-    return execute_float(sym.get(args_name[0]->get_value())->get_num());
+    return execute_float(sym.get(arg_names[0])->get_num());
   } else if (algo_name == "string") {
-    return execute_string(sym.get(args_name[0]->get_value())->get_num());
+    return execute_string(sym.get(arg_names[0])->get_num());
   }
   return ret;
 }
 
-std::shared_ptr<Value> BoundMethodValue::execute(NodeList args,
+std::shared_ptr<Value> BoundMethodValue::execute(const NodeList& args,
                                                  SymbolTable *parent) {
   if (obj->get_type() == VALUE_ARRAY) {
     ArrayValue *arr_obj = dynamic_cast<ArrayValue *>(obj.get());
@@ -320,7 +319,8 @@ std::shared_ptr<Value> BoundMethodValue::execute(NodeList args,
         return ret;
 
       // Execute body
-      NodeList algo_body = algo_val->get_node_ptr()->get_child();
+      AlgorithmDefNode* algo_node = dynamic_cast<AlgorithmDefNode*>(algo_val->get_node_ptr().get());
+      const NodeList& algo_body = algo_node->get_body();
 
       std::shared_ptr<Value> res = ret;
       for (int i = 0; i < algo_body.size(); ++i) {
@@ -643,7 +643,7 @@ void InstanceValue::set_member(const std::string &name,
     members[name] = val; // Just set it for now.
   }
 }
-std::shared_ptr<Value> StructValue::execute(NodeList args,
+std::shared_ptr<Value> StructValue::execute(const NodeList& args,
                                             SymbolTable *parent) {
   // Constructor call
   std::shared_ptr<InstanceValue> instance =
