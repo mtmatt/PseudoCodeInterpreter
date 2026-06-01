@@ -9,7 +9,9 @@
 #include "value.h"
 #include "node.h"
 #include "token.h"
+#include "jit.h"
 #include <memory>
+#include <optional>
 
 class Interpreter {
 public:
@@ -37,6 +39,15 @@ public:
     std::shared_ptr<Value> bin_op(std::shared_ptr<Value>, std::shared_ptr<Value>, std::shared_ptr<Token>);
     std::shared_ptr<Value> unary_op(std::shared_ptr<Value>, std::shared_ptr<Token>);
 protected:
+    struct JitCacheEntry {
+        int hits{0};
+        bool disabled{false};
+        std::optional<JitProgram> program;
+    };
+
+    std::optional<std::shared_ptr<Value>> try_visit_jit(const std::shared_ptr<Node>& node);
+    std::optional<std::shared_ptr<Value>> try_visit_array_method_call(const std::shared_ptr<Node>& node);
+
     SymbolTable &symbol_table;
     std::shared_ptr<Value> error, algo_call_temp;
 };
