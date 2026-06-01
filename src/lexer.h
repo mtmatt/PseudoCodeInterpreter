@@ -7,6 +7,7 @@
 
 #include <map>
 #include <set>
+#include <string>
 #include "token.h"
 
 #define NONE 0
@@ -57,10 +58,12 @@ public:
         , pos(-1, 0, -1, _file_name), current_char(NONE) {}
     void advance();
     TokenList make_tokens();
-    std::shared_ptr<Token> make_number();
-    std::shared_ptr<Token> make_identifier();
-    std::shared_ptr<Token> make_string();
+    std::shared_ptr<Token> make_number(const std::string& number_str, const Position& start_pos);
+    std::shared_ptr<Token> make_identifier(const std::string& id_str, const Position& start_pos);
+    std::shared_ptr<Token> make_string(const std::string& string_lexeme, const Position& start_pos);
 protected:
+    void advance_by(const std::string& lexeme);
+    std::shared_ptr<Token> make_error(const Position& start_pos, const std::string& message);
     std::string file_name, text;
     Position pos;
     char current_char;

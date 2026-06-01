@@ -8,8 +8,30 @@
 #include <string>
 #include <memory>
 #include <functional>
+#include <map>
 #include "node.h"
 #include "token.h"
+
+enum class GrammarProduction {
+    Statement,
+    Expr,
+    CompExpr,
+    ArithExpr,
+    Term,
+    Factor,
+    Power,
+    Call,
+    Atom,
+    ArrayExpr,
+    IfExpr,
+    ForExpr,
+    WhileExpr,
+    RepeatExpr,
+    AlgoDef,
+    StructDef
+};
+
+using Grammar = std::map<GrammarProduction, std::string>;
 
 class Parser {
 public:
@@ -33,6 +55,11 @@ public:
     std::shared_ptr<Node> algo_def(int tab_expect);
     std::shared_ptr<Node> struct_def(int tab_expect);
     NodeList statement(int tab_expect);
+    bool match_type(const std::string& token_type) const;
+    bool match_value(const std::string& token_value) const;
+    bool match_keyword(const std::string& keyword) const;
+    std::shared_ptr<Node> parse_error(const std::string& message);
+    static const Grammar& grammar();
     
     std::shared_ptr<Node> bin_op(
         int tab_expect,
