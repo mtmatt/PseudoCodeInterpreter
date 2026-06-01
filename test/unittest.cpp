@@ -8,6 +8,7 @@
 #include <interpreter.h>
 #include <pseudo.h>
 #include <memory>
+#include <stdexcept>
 
 // Token Tests
 TEST(TokenTest, EmptyTokenInTypeNone) {
@@ -239,6 +240,10 @@ TEST(InterpreterTest, TestBuiltin) {
     check_interpreter("int(\"123\")", "123", VALUE_INT);
     check_interpreter("float(\"12.34\")", "12.34", VALUE_FLOAT);
     check_interpreter("string(123)", "123", VALUE_STRING);
+}
+
+TEST(InterpreterTest, TestInvalidNumericString) {
+    EXPECT_THROW(check_interpreter("\"\" + 1.0", "IGNORE", "ANY"), std::invalid_argument);
 }
 
 TEST(InterpreterTest, TestAssignment) {
