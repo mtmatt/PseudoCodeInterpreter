@@ -218,6 +218,17 @@ TEST(InterpreterTest, TestControlFlowWhile) {
     check_interpreter("i <- 0; while i < 5 do i <- i + 1", "{1, 2, 3, 4, 5}", VALUE_ARRAY);
 }
 
+TEST(InterpreterTest, TestHotNumericLoop) {
+    check_interpreter(
+        "i <- 0\n"
+        "acc <- 0\n"
+        "while i < 25 do\n"
+        "    i <- i + 1\n"
+        "    acc <- (acc + (i * 7) % 11) % 1000\n"
+        "acc",
+        "130");
+}
+
 TEST(InterpreterTest, TestControlFlowRepeat) {
     // Repeat Until
     // i <- 0; repeat i <- i + 1 until i = 5
