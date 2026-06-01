@@ -387,21 +387,31 @@ std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(c
     }
 
     NodeList member_child = call_node->get_child();
-    std::shared_ptr<Value> obj = visit(member_child[0]);
-    if (obj->get_type() != VALUE_ARRAY) {
+    const std::string method_name = member_child[1]->get_name();
+    const bool supported_method =
+        method_name == "push" || method_name == "push_back" ||
+        method_name == "pop" || method_name == "pop_back" ||
+        method_name == "resize" || method_name == "size" ||
+        method_name == "back";
+    if (!supported_method || member_child[0]->get_type() != NODE_VARACCESS) {
         return std::nullopt;
     }
 
+    std::shared_ptr<Value> obj = symbol_table.get(member_child[0]->get_name());
+    if (obj->get_type() != VALUE_ARRAY) {
+        return std::nullopt;
+    }
     ArrayValue *arr_obj = dynamic_cast<ArrayValue *>(obj.get());
-    const std::string method_name = member_child[1]->get_name();
     const NodeList& args = algo_call_node->get_args();
+    SymbolTable arg_scope(&symbol_table);
+    Interpreter arg_interpreter(arg_scope);
 
     if (method_name == "push" || method_name == "push_back") {
         if (args.size() != 1) {
             return std::make_shared<ErrorValue>(
                 VALUE_ERROR, "Expect one argument for " + method_name + "\n");
         }
-        std::shared_ptr<Value> arg = visit(args[0]);
+        std::shared_ptr<Value> arg = arg_interpreter.visit(args[0]);
         if (arg->get_type() == VALUE_ERROR) {
             return arg;
         }
@@ -426,7 +436,7 @@ std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(c
             return std::make_shared<ErrorValue>(VALUE_ERROR,
                                                 "Expect one argument for resize\n");
         }
-        std::shared_ptr<Value> new_size_val = visit(args[0]);
+        std::shared_ptr<Value> new_size_val = arg_interpreter.visit(args[0]);
         if (new_size_val->get_type() == VALUE_ERROR) {
             return new_size_val;
         }
