@@ -8,6 +8,8 @@
 #include <iostream>
 #include <memory>
 #include <functional>
+#include <stdexcept>
+#include <unordered_map>
 
 namespace {
 constexpr int JIT_HOT_THRESHOLD = 8;
@@ -78,11 +80,13 @@ std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
 }
 
 std::optional<std::shared_ptr<Value>> Interpreter::try_visit_jit(const std::shared_ptr<Node>& node) {
+    static std::unordered_map<std::size_t, JitCacheEntry> jit_cache;
+
     if (!is_jit_root(node)) {
         return std::nullopt;
     }
 
-    JitCacheEntry& entry = jit_cache[node.get()];
+    JitCacheEntry& entry = jit_cache[node->get_id()];
     if (entry.disabled) {
         return std::nullopt;
     }
@@ -357,15 +361,115 @@ std::shared_ptr<Value> Interpreter::visit_algo_def(std::shared_ptr<Node> node) {
 }
 
 std::shared_ptr<Value> Interpreter::visit_algo_call(std::shared_ptr<Node> node) {
+    if (std::optional<std::shared_ptr<Value>> array_result = try_visit_array_method_call(node)) {
+        return *array_result;
+    }
+
     AlgorithmCallNode *algo_call_node = dynamic_cast<AlgorithmCallNode*>(node.get());
-    NodeList child = node->get_child();
     std::shared_ptr<Node> algo_node = algo_call_node->get_call();
     std::shared_ptr<Value> algo;
     if(algo_node->get_type() == NODE_VARACCESS)
         algo = symbol_table.get(algo_call_node->get_name());
     else
         algo = visit(algo_node);
-    return algo->execute(child, &symbol_table);
+    return algo->execute(algo_call_node->get_args(), &symbol_table);
+}
+
+std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(const std::shared_ptr<Node>& node) {
+    AlgorithmCallNode *algo_call_node = dynamic_cast<AlgorithmCallNode*>(node.get());
+    if (!algo_call_node) {
+        return std::nullopt;
+    }
+
+    std::shared_ptr<Node> call_node = algo_call_node->get_call();
+    if (call_node->get_type() != NODE_MEMACCESS) {
+        return std::nullopt;
+    }
+
+    NodeList member_child = call_node->get_child();
+    std::shared_ptr<Value> obj = visit(member_child[0]);
+    if (obj->get_type() != VALUE_ARRAY) {
+        return std::nullopt;
+    }
+
+    ArrayValue *arr_obj = dynamic_cast<ArrayValue *>(obj.get());
+    const std::string method_name = member_child[1]->get_name();
+    const NodeList& args = algo_call_node->get_args();
+
+    if (method_name == "push" || method_name == "push_back") {
+        if (args.size() != 1) {
+            return std::make_shared<ErrorValue>(
+                VALUE_ERROR, "Expect one argument for " + method_name + "\n");
+        }
+        std::shared_ptr<Value> arg = visit(args[0]);
+        if (arg->get_type() == VALUE_ERROR) {
+            return arg;
+        }
+        arr_obj->push_back(arg);
+        return arr_obj->back();
+    }
+
+    if (method_name == "pop" || method_name == "pop_back") {
+        if (!args.empty()) {
+            return std::make_shared<ErrorValue>(
+                VALUE_ERROR, "Expect zero argument for " + method_name + "\n");
+        }
+        if (arr_obj->empty()) {
+            return std::make_shared<ErrorValue>(
+                VALUE_ERROR, "Cannot " + method_name + " from an empty array\n");
+        }
+        return arr_obj->pop_back();
+    }
+
+    if (method_name == "resize") {
+        if (args.size() != 1) {
+            return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                                "Expect one argument for resize\n");
+        }
+        std::shared_ptr<Value> new_size_val = visit(args[0]);
+        if (new_size_val->get_type() == VALUE_ERROR) {
+            return new_size_val;
+        }
+        if (new_size_val->get_type() != VALUE_INT) {
+            return std::make_shared<ErrorValue>(
+                VALUE_ERROR, "Argument for resize must be an integer\n");
+        }
+        long long new_size;
+        try {
+            new_size = new_size_val->as_int();
+        } catch (const std::out_of_range&) {
+            return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                                "Resize argument out of range\n");
+        }
+        if (new_size < 0) {
+            return std::make_shared<ErrorValue>(
+                VALUE_ERROR, "Resize argument cannot be negative\n");
+        }
+        arr_obj->resize(static_cast<int>(new_size));
+        return obj;
+    }
+
+    if (method_name == "size") {
+        if (!args.empty()) {
+            return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                                "Expect zero argument for size\n");
+        }
+        return arr_obj->size();
+    }
+
+    if (method_name == "back") {
+        if (!args.empty()) {
+            return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                                "Expect zero arguments for back\n");
+        }
+        if (arr_obj->empty()) {
+            return std::make_shared<ErrorValue>(
+                VALUE_ERROR, "Cannot call back on an empty array\n");
+        }
+        return arr_obj->back();
+    }
+
+    return std::nullopt;
 }
 
 std::shared_ptr<Value> Interpreter::bin_op(
