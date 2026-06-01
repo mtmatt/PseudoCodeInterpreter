@@ -20,20 +20,23 @@ program, verifies that stdout matches, then reports median wall time across the
 requested iterations. On macOS it also reports peak resident memory using
 `/usr/bin/time -l`.
 
-Latest local result on Python 3.14.5, 3 iterations, 1 warmup:
+Latest local result on Python 3.14.5, 5 iterations, 1 warmup, with adaptive
+numeric expression JIT enabled:
 
 | benchmark | output | pseudo | Python 3.14 | slowdown | pseudo RSS | Python RSS |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| cpu_arithmetic | 9599988 | 0.2205s | 0.0314s | 7.0x | 27.6 MiB | 14.5 MiB |
-| recursive_fib | 46368 | 0.1994s | 0.0238s | 8.4x | 2.2 MiB | 14.5 MiB |
-| function_calls | 982568 | 0.0997s | 0.0238s | 4.2x | 9.7 MiB | 14.4 MiB |
-| array_memory | 25194337 | 0.0907s | 0.0260s | 3.5x | 16.3 MiB | 15.9 MiB |
-| array_push_pop | 24896907 | 0.1011s | 0.0255s | 4.0x | 15.5 MiB | 16.1 MiB |
-| string_concat | 20000 | 0.0406s | 0.0236s | 1.7x | 225.0 MiB | 14.6 MiB |
+| cpu_arithmetic | 9599988 | 0.0538s | 0.0329s | 1.6x | 27.7 MiB | 14.5 MiB |
+| recursive_fib | 46368 | 0.2218s | 0.0241s | 9.2x | 2.4 MiB | 14.5 MiB |
+| function_calls | 982568 | 0.1118s | 0.0251s | 4.5x | 9.8 MiB | 14.5 MiB |
+| array_memory | 25194337 | 0.0709s | 0.0266s | 2.7x | 15.0 MiB | 15.9 MiB |
+| array_push_pop | 24896907 | 0.1081s | 0.0262s | 4.1x | 14.1 MiB | 16.2 MiB |
+| string_concat | 20000 | 0.0392s | 0.0236s | 1.7x | 225.0 MiB | 14.6 MiB |
 
 Notes:
 
 - Timings include process startup for both executables.
+- The JIT currently specializes hot numeric expressions; it does not compile
+  functions, arrays, strings, structs, imports, or native machine code.
 - `recursive_fib` mainly measures function call and recursion overhead.
 - `array_memory` exercises resize, indexed writes, indexed reads, and integer
   arithmetic.

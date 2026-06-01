@@ -9,7 +9,20 @@
 #include <memory>
 #include <functional>
 
+namespace {
+constexpr int JIT_HOT_THRESHOLD = 8;
+
+bool is_jit_root(const std::shared_ptr<Node>& node) {
+    if (!node) return false;
+    return node->get_type() == NODE_BINOP || node->get_type() == NODE_UNARYOP;
+}
+} // namespace
+
 std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
+    if (std::optional<std::shared_ptr<Value>> jit_result = try_visit_jit(node)) {
+        return *jit_result;
+    }
+
     if(node->get_type() == NODE_VALUE) {
         return visit_number(node);
     }
@@ -62,6 +75,34 @@ std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
         return visit_return(node);
     }
     return std::make_shared<ErrorValue>(VALUE_ERROR, "Fail to get result\n");
+}
+
+std::optional<std::shared_ptr<Value>> Interpreter::try_visit_jit(const std::shared_ptr<Node>& node) {
+    if (!is_jit_root(node)) {
+        return std::nullopt;
+    }
+
+    JitCacheEntry& entry = jit_cache[node.get()];
+    if (entry.disabled) {
+        return std::nullopt;
+    }
+
+    if (entry.program) {
+        return entry.program->execute(symbol_table);
+    }
+
+    ++entry.hits;
+    if (entry.hits < JIT_HOT_THRESHOLD) {
+        return std::nullopt;
+    }
+
+    entry.program = ExpressionJit::compile(node);
+    if (!entry.program) {
+        entry.disabled = true;
+        return std::nullopt;
+    }
+
+    return entry.program->execute(symbol_table);
 }
 
 std::shared_ptr<Value> Interpreter::visit_number(std::shared_ptr<Node> node) {
