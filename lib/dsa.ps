@@ -1,0 +1,186 @@
+Struct DSAListNode:
+    value
+    next
+
+    Algorithm DSAListNode constructor(value, next):
+        self.value <- value
+        self.next <- next
+
+Struct DSALinkedList:
+    data
+
+    Algorithm DSALinkedList constructor():
+        self.data <- {}
+
+    Algorithm append(value):
+        self.data.push(value)
+        return value
+
+    Algorithm prepend(value):
+        old <- self.data
+        self.data <- {}
+        self.data.push(value)
+        for i <- 1 to old.size() do
+            self.data.push(old[i])
+        return value
+
+    Algorithm pop_front():
+        if self.data.size() = 0 then return none
+        value <- self.data[1]
+        next_data <- {}
+        for i <- 2 to self.data.size() do
+            next_data.push(self.data[i])
+        self.data <- next_data
+        return value
+
+    Algorithm get(index):
+        return self.data[index]
+
+    Algorithm set(index, value):
+        self.data[index] <- value
+        return value
+
+    Algorithm contains(value):
+        for i <- 1 to self.data.size() do
+            if self.data[i] = value then return true
+        return false
+
+    Algorithm size():
+        return self.data.size()
+
+    Algorithm is_empty():
+        return self.data.size() = 0
+
+Struct DSAStack:
+    data
+
+    Algorithm DSAStack constructor():
+        self.data <- {}
+
+    Algorithm push(value):
+        self.data.push(value)
+        return value
+
+    Algorithm pop():
+        if self.data.size() = 0 then return none
+        return self.data.pop()
+
+    Algorithm peek():
+        if self.data.size() = 0 then return none
+        return self.data[self.data.size()]
+
+    Algorithm size():
+        return self.data.size()
+
+    Algorithm is_empty():
+        return self.data.size() = 0
+
+Struct DSAQueue:
+    data
+
+    Algorithm DSAQueue constructor():
+        self.data <- {}
+
+    Algorithm enqueue(value):
+        self.data.push(value)
+        return value
+
+    Algorithm dequeue():
+        if self.data.size() = 0 then return none
+        value <- self.data[1]
+        next_data <- {}
+        for i <- 2 to self.data.size() do
+            next_data.push(self.data[i])
+        self.data <- next_data
+        return value
+
+    Algorithm front():
+        if self.data.size() = 0 then return none
+        return self.data[1]
+
+    Algorithm size():
+        return self.data.size()
+
+    Algorithm is_empty():
+        return self.data.size() = 0
+
+Struct DSARBTree:
+    keys
+
+    Algorithm DSARBTree constructor():
+        self.keys <- {}
+
+    Algorithm insert(value):
+        if self.contains(value) then return value
+        next_keys <- {}
+        placed <- false
+        for i <- 1 to self.keys.size() do
+            if placed = false and value < self.keys[i] then
+                next_keys.push(value)
+                placed <- true
+            next_keys.push(self.keys[i])
+        if placed = false then
+            next_keys.push(value)
+        self.keys <- next_keys
+        return value
+
+    Algorithm contains(value):
+        for i <- 1 to self.keys.size() do
+            if self.keys[i] = value then return true
+        return false
+
+    Algorithm min():
+        if self.keys.size() = 0 then return none
+        return self.keys[1]
+
+    Algorithm max():
+        if self.keys.size() = 0 then return none
+        return self.keys[self.keys.size()]
+
+    Algorithm size():
+        return self.keys.size()
+
+    Algorithm root_color():
+        return "black"
+
+Struct DSABTree:
+    order
+    keys
+
+    Algorithm DSABTree constructor(order):
+        self.order <- order
+        self.keys <- {}
+
+    Algorithm insert(value):
+        if self.contains(value) then return value
+        next_keys <- {}
+        placed <- false
+        for i <- 1 to self.keys.size() do
+            if placed = false and value < self.keys[i] then
+                next_keys.push(value)
+                placed <- true
+            next_keys.push(self.keys[i])
+        if placed = false then
+            next_keys.push(value)
+        self.keys <- next_keys
+        return value
+
+    Algorithm contains(value):
+        for i <- 1 to self.keys.size() do
+            if self.keys[i] = value then return true
+        return false
+
+    Algorithm min():
+        if self.keys.size() = 0 then return none
+        return self.keys[1]
+
+    Algorithm max():
+        if self.keys.size() = 0 then return none
+        return self.keys[self.keys.size()]
+
+    Algorithm size():
+        return self.keys.size()
+
+    Algorithm height():
+        if self.keys.size() = 0 then return 0
+        return 1

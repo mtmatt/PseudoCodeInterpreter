@@ -6,6 +6,7 @@
 #include <value.h>
 #include <parser.h>
 #include <interpreter.h>
+#include <pseudo.h>
 #include <memory>
 
 // Token Tests
@@ -243,6 +244,22 @@ TEST(InterpreterTest, TestBuiltin) {
 TEST(InterpreterTest, TestAssignment) {
     check_interpreter("x <- 10", "10");
     check_interpreter("x <- 10; x <- x + 5", "15");
+}
+
+TEST(ImportTest, TestImportDsaStack) {
+    SymbolTable st;
+    std::string result = run(
+        "test/import_dsa.ps",
+        "import dsa\n"
+        "stack <- DSAStack()\n"
+        "stack.push(4)\n"
+        "result <- stack.pop()\n",
+        st);
+
+    EXPECT_EQ(result, "");
+    std::shared_ptr<Value> imported_result = st.get("result");
+    ASSERT_NE(imported_result.get(), nullptr);
+    EXPECT_EQ(imported_result->get_num(), "4");
 }
 
 int main(int argc, char *argv[]) {

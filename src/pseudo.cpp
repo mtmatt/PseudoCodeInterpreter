@@ -4,10 +4,15 @@
 #include "node.h"
 #include "value.h"
 #include "error.h"
+#include <cctype>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
+#include <vector>
 
 /// --------------------
 /// Value
@@ -660,9 +665,174 @@ std::shared_ptr<Value> StructValue::execute(NodeList args,
 /// Run
 /// --------------------
 
+namespace {
+
+struct ImportState {
+  std::set<std::string> loaded;
+  std::set<std::string> loading;
+};
+
+std::string trim(const std::string &str) {
+  size_t begin = 0;
+  while (begin < str.size() &&
+         std::isspace(static_cast<unsigned char>(str[begin]))) {
+    begin++;
+  }
+
+  size_t end = str.size();
+  while (end > begin &&
+         std::isspace(static_cast<unsigned char>(str[end - 1]))) {
+    end--;
+  }
+  return str.substr(begin, end - begin);
+}
+
+bool parse_import_line(const std::string &line, std::string &target) {
+  std::string trimmed = trim(line);
+  const std::string keyword = "import";
+  if (trimmed.rfind(keyword, 0) != 0) {
+    return false;
+  }
+  if (trimmed.size() > keyword.size() &&
+      !std::isspace(static_cast<unsigned char>(trimmed[keyword.size()]))) {
+    return false;
+  }
+
+  target = trim(trimmed.substr(keyword.size()));
+  if (target.empty()) {
+    return false;
+  }
+
+  if (target.front() == '"' && target.back() == '"' && target.size() >= 2) {
+    target = target.substr(1, target.size() - 2);
+  }
+  return !target.empty();
+}
+
+std::vector<std::filesystem::path>
+candidate_import_paths(const std::string &target,
+                       const std::filesystem::path &base_dir) {
+  namespace fs = std::filesystem;
+  fs::path target_path(target);
+  std::vector<fs::path> candidates;
+
+  if (target_path.is_absolute()) {
+    candidates.push_back(target_path);
+  } else {
+    if (!target_path.has_extension()) {
+      candidates.push_back(fs::current_path() / "lib" / (target + ".ps"));
+    }
+    candidates.push_back(base_dir / target_path);
+    candidates.push_back(fs::current_path() / target_path);
+  }
+
+  if (!target_path.has_extension()) {
+    candidates.push_back(base_dir / (target + ".ps"));
+    candidates.push_back(fs::current_path() / (target + ".ps"));
+  }
+
+  return candidates;
+}
+
+bool read_file(const std::filesystem::path &path, std::string &text) {
+  std::ifstream input(path);
+  if (!input) {
+    return false;
+  }
+  std::stringstream buffer;
+  buffer << input.rdbuf();
+  text = buffer.str();
+  if (!text.empty() && text.back() != '\n') {
+    text += '\n';
+  }
+  return true;
+}
+
+bool resolve_import(const std::string &target,
+                    const std::filesystem::path &base_dir,
+                    std::filesystem::path &resolved) {
+  namespace fs = std::filesystem;
+  for (const auto &candidate : candidate_import_paths(target, base_dir)) {
+    std::error_code ec;
+    if (fs::exists(candidate, ec) && fs::is_regular_file(candidate, ec)) {
+      resolved = fs::weakly_canonical(candidate, ec);
+      if (ec) {
+        resolved = fs::absolute(candidate, ec);
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+bool expand_imports(const std::string &file_name, const std::string &text,
+                    ImportState &state, std::string &expanded,
+                    std::string &error) {
+  namespace fs = std::filesystem;
+  fs::path current_path(file_name);
+  fs::path base_dir = current_path.has_parent_path()
+                          ? fs::absolute(current_path).parent_path()
+                          : fs::current_path();
+
+  std::stringstream input(text);
+  std::string line;
+  while (std::getline(input, line)) {
+    std::string target;
+    if (!parse_import_line(line, target)) {
+      expanded += line + "\n";
+      continue;
+    }
+
+    fs::path import_path;
+    if (!resolve_import(target, base_dir, import_path)) {
+      error = "Import ERROR: cannot resolve \"" + target + "\" from " +
+              base_dir.string();
+      return false;
+    }
+
+    std::string import_key = import_path.string();
+    if (state.loaded.count(import_key)) {
+      continue;
+    }
+    if (state.loading.count(import_key)) {
+      error = "Import ERROR: circular import involving " + import_key;
+      return false;
+    }
+
+    std::string import_text;
+    if (!read_file(import_path, import_text)) {
+      error = "Import ERROR: cannot read " + import_key;
+      return false;
+    }
+
+    state.loading.insert(import_key);
+    std::string import_expanded;
+    if (!expand_imports(import_key, import_text, state, import_expanded,
+                        error)) {
+      return false;
+    }
+    state.loading.erase(import_key);
+    state.loaded.insert(import_key);
+    expanded += import_expanded;
+    expanded += "\n";
+  }
+  return true;
+}
+
+} // namespace
+
 std::string run(std::string file_name, std::string text,
                 SymbolTable &global_symbol_table) {
-  Lexer lexer(file_name, text);
+  ImportState import_state;
+  std::string expanded_text;
+  std::string import_error;
+  if (!expand_imports(file_name, text, import_state, expanded_text,
+                      import_error)) {
+    std::cout << import_error << "\n";
+    return "ABORT";
+  }
+
+  Lexer lexer(file_name, expanded_text);
   TokenList tokens = lexer.make_tokens();
   if (tokens.empty())
     return "";
@@ -678,7 +848,7 @@ std::string run(std::string file_name, std::string text,
     for (auto tok : tokens) {
         if (tok->get_type() == TOKEN_ERROR) {
              std::cout << "Error: " << tok->get_value() << ", line " << tok->get_pos().line + 1 << ", column: " << tok->get_pos().column << "\n";
-             std::cout << error_marker(text, tok->get_pos(), tok->get_pos());
+             std::cout << error_marker(expanded_text, tok->get_pos(), tok->get_pos());
              return "ABORT";
         }
     }
@@ -693,7 +863,7 @@ std::string run(std::string file_name, std::string text,
       std::shared_ptr<Token> err_tok = node->get_tok();
       if(err_tok) {
           std::cout << "Error: " << err_tok->get_value() << ", line " << err_tok->get_pos().line + 1 << ", column: " << err_tok->get_pos().column << "\n";
-          std::cout << error_marker(text, err_tok->get_pos(), err_tok->get_pos());
+          std::cout << error_marker(expanded_text, err_tok->get_pos(), err_tok->get_pos());
       } else {
           std::cout << "Error: " << node->get_node() << "\n";
       }
