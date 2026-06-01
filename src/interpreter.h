@@ -12,7 +12,6 @@
 #include "jit.h"
 #include <memory>
 #include <optional>
-#include <unordered_map>
 
 class Interpreter {
 public:
@@ -47,10 +46,10 @@ protected:
     };
 
     std::optional<std::shared_ptr<Value>> try_visit_jit(const std::shared_ptr<Node>& node);
+    std::optional<std::shared_ptr<Value>> try_visit_array_method_call(const std::shared_ptr<Node>& node);
 
     SymbolTable &symbol_table;
     std::shared_ptr<Value> error, algo_call_temp;
-    std::unordered_map<const Node*, JitCacheEntry> jit_cache;
 };
 
 #endif

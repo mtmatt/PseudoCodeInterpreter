@@ -5,6 +5,8 @@
 #ifndef NODE_H
 #define NODE_H
 
+#include <atomic>
+#include <cstddef>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -33,6 +35,7 @@ const std::string TAB{"    "};
 
 class Node {
 public:
+    Node() : node_id(next_node_id.fetch_add(1, std::memory_order_relaxed)) {}
     virtual std::string get_node() = 0;
     virtual ~Node() {};
     virtual std::vector<std::shared_ptr<Node>> get_child() { return std::vector<std::shared_ptr<Node>>(0);}
@@ -40,6 +43,10 @@ public:
     virtual std::shared_ptr<Token> get_tok() { return nullptr;}
     virtual TokenList get_toks() { return TokenList(0);}
     virtual std::string get_name() { return "";}
+    std::size_t get_id() const { return node_id;}
+private:
+    inline static std::atomic_size_t next_node_id{1};
+    std::size_t node_id;
 };
 
 using NodeList = std::vector<std::shared_ptr<Node>>;
@@ -200,6 +207,7 @@ public:
         : algo_name(_algo_name), args_name(_args_name), body_node(_body_node) {}
     std::string get_node() override;
     NodeList get_child() override { return body_node;}
+    const NodeList& get_body() const { return body_node;}
     std::string get_type() override { return NODE_ALGODEF;}
     std::shared_ptr<Token> get_tok() override { return algo_name;}
     TokenList get_toks() override { return args_name;}
@@ -216,6 +224,7 @@ public:
         : call_node(_call_node), args(_args) {}
     std::string get_node() override;
     NodeList get_child() override { return args;}
+    const NodeList& get_args() const { return args;}
     std::string get_type() override { return NODE_ALGOCALL;}
     std::shared_ptr<Token> get_tok() override { return nullptr;}
     std::string get_name() override { return call_node->get_name();}
