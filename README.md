@@ -31,6 +31,38 @@ Transform pseudo-code into an executable programming language.
 - `quit()` : Exits the interpreter.
 - `int(v)`, `float(v)`, `string(v)` : Type conversion functions.
 
+## Imports
+
+Use `import` to load another pseudocode file before the current file is parsed.
+Imported definitions share the same global symbol table as the importing file.
+
+```pseudo
+import dsa
+import "relative/path/to/module.ps"
+```
+
+Bare module names resolve from `lib/<name>.ps`. Quoted paths may point to a
+specific `.ps` file. Imports are loaded once per run and circular imports are
+reported as errors.
+
+## Standard Library
+
+The `dsa` library provides prefixed data-structure types:
+
+- `DSALinkedList`: `append`, `prepend`, `pop_front`, `get`, `set`, `contains`, `size`, `is_empty`
+- `DSAStack`: `push`, `pop`, `peek`, `size`, `is_empty`
+- `DSAQueue`: `enqueue`, `dequeue`, `front`, `size`, `is_empty`
+- `DSARBTree`: `insert`, `contains`, `min`, `max`, `size`, `root_color`
+- `DSABTree`: `insert`, `contains`, `min`, `max`, `size`, `height`
+
+```pseudo
+import dsa
+
+stack <- DSAStack()
+stack.push(10)
+print(stack.pop())
+```
+
 ## Expressions & Syntax
 
 ### Operators
