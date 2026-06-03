@@ -42,6 +42,7 @@ public:
     virtual int64_t as_int();
     virtual double as_double();
     virtual std::string as_string();
+    virtual bool append_string(const std::string&) { return false; }
     virtual std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr)
         { return std::make_shared<Value>();};
     friend std::ostream& operator<<(std::ostream &out, Value &token);
@@ -62,6 +63,7 @@ public:
     int64_t as_int() override;
     double as_double() override;
     std::string as_string() override;
+    bool append_string(const std::string&) override;
 
 protected:
     T value;
@@ -97,6 +99,7 @@ public:
     friend class BoundMethodValue;
     // Expose value for friends/derived or public use if needed for method binding
     std::shared_ptr<Node> get_node_ptr() { return value; }
+    const std::vector<std::string>& get_arg_names() const { return arg_names; }
 protected:
 };
 

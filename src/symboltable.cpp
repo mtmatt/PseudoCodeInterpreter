@@ -6,8 +6,9 @@
 #include "color.h"
 #include <memory>
 
-std::shared_ptr<Value> SymbolTable::get(std::string name) {
-    if(symbols.count(name) == 0){
+std::shared_ptr<Value> SymbolTable::get(const std::string& name) {
+    auto found = symbols.find(name);
+    if(found == symbols.end()){
         if(parent != nullptr) {
             return parent->get(name);
         } else if(BUILTIN_ALGOS.count(name)) {
@@ -17,13 +18,28 @@ std::shared_ptr<Value> SymbolTable::get(std::string name) {
                 VALUE_ERROR, Color(0xFF, 0x39, 0x6E).get() + "Identifier: \""+ name +"\" has not defined\n" RESET);
         }
     }
-    return symbols[name];
+    return found->second;
 }
 
-void SymbolTable::set(std::string name, std::shared_ptr<Value> value) {
+void SymbolTable::set(const std::string& name, std::shared_ptr<Value> value) {
+    if (value->get_type() == VALUE_INSTANCE) {
+        contains_instance = true;
+    }
     symbols[name] = value;
 }
 
-void SymbolTable::erase(std::string name) {
+void SymbolTable::erase(const std::string& name) {
     symbols.erase(name);
+}
+
+bool SymbolTable::contains_local(const std::string& name) const {
+    return symbols.find(name) != symbols.end();
+}
+
+std::shared_ptr<Value> SymbolTable::get_local(const std::string& name) const {
+    auto found = symbols.find(name);
+    if (found == symbols.end()) {
+        return nullptr;
+    }
+    return found->second;
 }
