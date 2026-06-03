@@ -22,6 +22,8 @@ BENCHMARKS = [
     "array_memory",
     "array_push_pop",
     "string_concat",
+    "rbtree_ordered_set",
+    "btree_ordered_set",
 ]
 
 MAX_RSS_RE = re.compile(r"^\s*(\d+)\s+maximum resident set size", re.MULTILINE)
@@ -159,14 +161,14 @@ def main():
     print(f"Iterations: {args.iterations}, warmups: {args.warmups}")
     print()
     print(
-        f"{'benchmark':<16} {'output':<12} {'pseudo':>10} {'python':>10} "
+        f"{'benchmark':<20} {'output':<24} {'pseudo':>10} {'python':>10} "
         f"{'slowdown':>10} {'pseudo rss':>12} {'python rss':>12}"
     )
     print("-" * 91)
     for name, pseudo, python in rows:
         slowdown = pseudo["median"] / python["median"]
         print(
-            f"{name:<16} {output_digest(pseudo['output']):<12} "
+            f"{name:<20} {output_digest(pseudo['output']):<24} "
             f"{format_time(pseudo['median']):>10} {format_time(python['median']):>10} "
             f"{slowdown:>9.1f}x {format_rss(pseudo['rss']):>12} {format_rss(python['rss']):>12}"
         )

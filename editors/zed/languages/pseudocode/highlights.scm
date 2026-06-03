@@ -1,0 +1,9 @@
+(keyword) @keyword
+(builtin) @function.builtin
+(boolean) @boolean
+(number) @number
+(string) @string
+(identifier) @variable
+(comment) @comment
+(operator) @operator
+(punctuation) @punctuation.delimiter

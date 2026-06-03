@@ -31,6 +31,8 @@ const std::string NODE_ARRASSIGN("ARRASSIGN");
 const std::string NODE_MEMACCESS("MEMACCESS");
 const std::string NODE_STRUCTDEF("STRUCTDEF");
 const std::string NODE_RETURN("RETURN");
+const std::string NODE_BREAK("BREAK");
+const std::string NODE_CONTINUE("CONTINUE");
 const std::string TAB{"    "};
 
 class Node {
@@ -310,6 +312,16 @@ public:
     std::string get_name() override { return "";}
 protected:
     std::shared_ptr<Node> node;
+};
+
+class ControlNode: public Node {
+public:
+    ControlNode(const std::string& _type)
+        : control_type(_type) {}
+    std::string get_node() override { return control_type; }
+    std::string get_type() override { return control_type; }
+protected:
+    std::string control_type;
 };
 
 #endif

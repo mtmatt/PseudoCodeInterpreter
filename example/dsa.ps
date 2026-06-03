@@ -1,24 +1,24 @@
 import dsa
 
-list <- DSALinkedList()
+list <- LinkedList()
 list.append(2)
 list.prepend(1)
 print(list.get(1))
 print(list.get(2))
 
-stack <- DSAStack()
+stack <- Stack()
 stack.push(10)
 stack.push(20)
 print(stack.pop())
 print(stack.peek())
 
-queue <- DSAQueue()
+queue <- Queue()
 queue.enqueue(7)
 queue.enqueue(8)
 print(queue.dequeue())
 print(queue.front())
 
-rb <- DSARBTree()
+rb <- RBTree()
 rb.insert(5)
 rb.insert(2)
 rb.insert(9)
@@ -26,7 +26,7 @@ print(rb.min())
 print(rb.max())
 print(rb.contains(5))
 
-btree <- DSABTree(4)
+btree <- BTree(4)
 btree.insert(3)
 btree.insert(1)
 btree.insert(6)

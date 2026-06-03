@@ -74,6 +74,27 @@ TEST(LexerTest, TestOperators) {
     EXPECT_EQ(tokens[3]->get_type(), TOKEN_DIV);
 }
 
+TEST(LexerTest, TestLineComments) {
+    Lexer lexer("test", "x <- 1 // ignored\n// whole line\nx / 2");
+    TokenList tokens = lexer.make_tokens();
+    ASSERT_EQ(tokens.size(), 8);
+    EXPECT_EQ(tokens[0]->get_type(), TOKEN_IDENTIFIER);
+    EXPECT_EQ(tokens[1]->get_type(), TOKEN_ASSIGN);
+    EXPECT_EQ(tokens[2]->get_type(), TOKEN_INT);
+    EXPECT_EQ(tokens[3]->get_type(), TOKEN_NEWLINE);
+    EXPECT_EQ(tokens[4]->get_type(), TOKEN_NEWLINE);
+    EXPECT_EQ(tokens[5]->get_type(), TOKEN_IDENTIFIER);
+    EXPECT_EQ(tokens[6]->get_type(), TOKEN_DIV);
+    EXPECT_EQ(tokens[7]->get_type(), TOKEN_INT);
+}
+
+TEST(LexerTest, TestIndentedCommentLinesIgnoreTabSize) {
+    Lexer lexer("test", "x <- 1\n                     // 21 spaces before comment\nx <- 2");
+    TokenList tokens = lexer.make_tokens();
+    ASSERT_FALSE(tokens.empty());
+    EXPECT_NE(tokens[0]->get_type(), TOKEN_ERROR);
+}
+
 // SymbolTable Tests
 TEST(SymbolTableTest, TestSetAndGet) {
     SymbolTable st;
@@ -237,6 +258,8 @@ TEST(InterpreterTest, TestControlFlowRepeat) {
 }
 
 TEST(InterpreterTest, TestArray) {
+    check_interpreter("a <- []; a.size()", "0");
+    check_interpreter("a <- [1, 2, 3]; a[2]", "2");
     check_interpreter("a <- {1, 2, 3}; a[1]", "1");
     check_interpreter("a <- {1, 2, 3}; a[2]", "2");
     check_interpreter("a <- {1, 2, 3}; a.size()", "3");
@@ -247,12 +270,16 @@ TEST(InterpreterTest, TestArray) {
     check_interpreter("a <- {1, 2, 3}; a.pop()", "3");
     // Array method arguments are evaluated in a call-local scope.
     check_interpreter("x <- 1; a <- {}; a.push(x <- 2); x", "1");
+    check_interpreter("a <- {}; a.pop()", "NONE", VALUE_NONE);
+    check_interpreter("a <- {1, 2}; a.resize(-1); a.size()", "2");
+    check_interpreter("a <- {1, 2}; a.resize(\"abc\"); a.size()", "2");
 }
 
 TEST(InterpreterTest, TestBuiltin) {
     check_interpreter("int(\"123\")", "123", VALUE_INT);
     check_interpreter("float(\"12.34\")", "12.34", VALUE_FLOAT);
     check_interpreter("string(123)", "123", VALUE_STRING);
+    check_interpreter("print(\"x\", 1)", "NONE", VALUE_NONE);
 }
 
 TEST(InterpreterTest, TestInvalidNumericString) {
@@ -269,7 +296,7 @@ TEST(ImportTest, TestImportDsaStack) {
     std::string result = run(
         "test/import_dsa.ps",
         "import dsa\n"
-        "stack <- DSAStack()\n"
+        "stack <- Stack()\n"
         "stack.push(4)\n"
         "result <- stack.pop()\n",
         st);
@@ -278,6 +305,193 @@ TEST(ImportTest, TestImportDsaStack) {
     std::shared_ptr<Value> imported_result = st.get("result");
     ASSERT_NE(imported_result.get(), nullptr);
     EXPECT_EQ(imported_result->get_num(), "4");
+}
+
+TEST(ImportTest, TestOptimizedDsaCollections) {
+    SymbolTable st;
+    std::string result = run(
+        "test/import_dsa_optimized.ps",
+        "import dsa\n"
+        "queue <- Queue()\n"
+        "queue.enqueue(1)\n"
+        "queue.enqueue(2)\n"
+        "first <- queue.dequeue()\n"
+        "front <- queue.front()\n"
+        "list <- LinkedList()\n"
+        "list.append(2)\n"
+        "list.prepend(1)\n"
+        "list.append(3)\n"
+        "second <- list.get(2)\n"
+        "list.set(2, 20)\n"
+        "updated <- list.get(2)\n"
+        "popped <- list.pop_front()\n",
+        st);
+
+    EXPECT_EQ(result, "");
+    EXPECT_EQ(st.get("first")->get_num(), "1");
+    EXPECT_EQ(st.get("front")->get_num(), "2");
+    EXPECT_EQ(st.get("second")->get_num(), "2");
+    EXPECT_EQ(st.get("updated")->get_num(), "20");
+    EXPECT_EQ(st.get("popped")->get_num(), "1");
+}
+
+TEST(ImportTest, TestDsaTree) {
+    SymbolTable st;
+    std::string result = run(
+        "test/import_dsa_tree.ps",
+        "import dsa\n"
+        "tree <- Tree()\n"
+        "empty <- tree.is_empty()\n"
+        "tree.insert(5)\n"
+        "tree.insert(3)\n"
+        "tree.insert(7)\n"
+        "tree.insert(5)\n"
+        "has_three <- tree.contains(3)\n"
+        "missing <- tree.contains(4)\n"
+        "min_value <- tree.min()\n"
+        "max_value <- tree.max()\n"
+        "tree_size <- tree.size()\n",
+        st);
+
+    EXPECT_EQ(result, "");
+    EXPECT_EQ(st.get("empty")->get_num(), "1");
+    EXPECT_EQ(st.get("has_three")->get_num(), "1");
+    EXPECT_EQ(st.get("missing")->get_num(), "0");
+    EXPECT_EQ(st.get("min_value")->get_num(), "3");
+    EXPECT_EQ(st.get("max_value")->get_num(), "7");
+    EXPECT_EQ(st.get("tree_size")->get_num(), "3");
+}
+
+TEST(ImportTest, TestDsaDsu) {
+    SymbolTable st;
+    std::string result = run(
+        "test/import_dsa_dsu.ps",
+        "import dsa\n"
+        "dsu <- DSU()\n"
+        "dsu.make_set(1)\n"
+        "dsu.make_set(2)\n"
+        "dsu.make_set(3)\n"
+        "before <- dsu.connected(1, 3)\n"
+        "dsu.merge(1, 2)\n"
+        "dsu.merge(2, 3)\n"
+        "after <- dsu.connected(1, 3)\n"
+        "root <- dsu.find(3)\n"
+        "set_count <- dsu.size()\n",
+        st);
+
+    EXPECT_EQ(result, "");
+    EXPECT_EQ(st.get("before")->get_num(), "0");
+    EXPECT_EQ(st.get("after")->get_num(), "1");
+    EXPECT_EQ(st.get("root")->get_num(), "1");
+    EXPECT_EQ(st.get("set_count")->get_num(), "1");
+}
+
+TEST(ParserTest, TestMixedMemberIndexChain) {
+    check_interpreter(
+        "Struct Box:\n"
+        "    items\n"
+        "    Algorithm Box constructor():\n"
+        "        self.items <- {}\n"
+        "box <- Box()\n"
+        "box.items.push(Box())\n"
+        "box.items[1].items <- {7}\n"
+        "box.items[1].items[1]",
+        "7",
+        VALUE_INT);
+}
+
+TEST(InterpreterTest, TestBreakContinueAndShortCircuit) {
+    SymbolTable st;
+    std::string result = run(
+        "test/control_flow.ps",
+        "sum <- 0\n"
+        "i <- 0\n"
+        "while i < 10 do\n"
+        "    i <- i + 1\n"
+        "    if i = 3 then continue\n"
+        "    if i = 6 then break\n"
+        "    sum <- sum + i\n"
+        "empty <- {}\n"
+        "guarded <- false and empty[1]\n",
+        st);
+
+    EXPECT_EQ(result, "");
+    EXPECT_EQ(st.get("sum")->get_num(), "12");
+    EXPECT_EQ(st.get("guarded")->get_num(), "0");
+}
+
+TEST(InterpreterTest, TestArrayInsertRemove) {
+    SymbolTable st;
+    std::string result = run(
+        "test/array_insert_remove.ps",
+        "arr <- {1, 3}\n"
+        "arr.insert(2, 2)\n"
+        "removed <- arr.remove(1)\n"
+        "first <- arr[1]\n"
+        "second <- arr[2]\n",
+        st);
+
+    EXPECT_EQ(result, "");
+    EXPECT_EQ(st.get("removed")->get_num(), "1");
+    EXPECT_EQ(st.get("first")->get_num(), "2");
+    EXPECT_EQ(st.get("second")->get_num(), "3");
+}
+
+TEST(ImportTest, TestOptimizedRbTree) {
+    SymbolTable st;
+    std::string result = run(
+        "test/import_dsa_rbtree.ps",
+        "import dsa\n"
+        "tree <- RBTree()\n"
+        "tree.insert(10)\n"
+        "tree.insert(5)\n"
+        "tree.insert(15)\n"
+        "tree.insert(3)\n"
+        "tree.insert(7)\n"
+        "tree.insert(12)\n"
+        "tree.insert(18)\n"
+        "tree.insert(7)\n"
+        "has_seven <- tree.contains(7)\n"
+        "missing <- tree.contains(9)\n"
+        "min_value <- tree.min()\n"
+        "max_value <- tree.max()\n"
+        "tree_size <- tree.size()\n"
+        "root_color <- tree.root_color()\n",
+        st);
+
+    EXPECT_EQ(result, "");
+    EXPECT_EQ(st.get("has_seven")->get_num(), "1");
+    EXPECT_EQ(st.get("missing")->get_num(), "0");
+    EXPECT_EQ(st.get("min_value")->get_num(), "3");
+    EXPECT_EQ(st.get("max_value")->get_num(), "18");
+    EXPECT_EQ(st.get("tree_size")->get_num(), "7");
+    EXPECT_EQ(st.get("root_color")->get_num(), "black");
+}
+
+TEST(ImportTest, TestOptimizedBTree) {
+    SymbolTable st;
+    std::string result = run(
+        "test/import_dsa_btree.ps",
+        "import dsa\n"
+        "tree <- BTree(2)\n"
+        "for i <- 1 to 20 do\n"
+        "    tree.insert(i)\n"
+        "tree.insert(10)\n"
+        "has_fifteen <- tree.contains(15)\n"
+        "missing <- tree.contains(21)\n"
+        "min_value <- tree.min()\n"
+        "max_value <- tree.max()\n"
+        "tree_size <- tree.size()\n"
+        "tree_height <- tree.height()\n",
+        st);
+
+    EXPECT_EQ(result, "");
+    EXPECT_EQ(st.get("has_fifteen")->get_num(), "1");
+    EXPECT_EQ(st.get("missing")->get_num(), "0");
+    EXPECT_EQ(st.get("min_value")->get_num(), "1");
+    EXPECT_EQ(st.get("max_value")->get_num(), "20");
+    EXPECT_EQ(st.get("tree_size")->get_num(), "20");
+    EXPECT_EQ(st.get("tree_height")->get_num(), "4");
 }
 
 int main(int argc, char *argv[]) {

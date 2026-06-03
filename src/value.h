@@ -22,6 +22,8 @@ const std::string VALUE_ARRAY{"Array"};
 const std::string VALUE_STRUCT{"Struct"};
 const std::string VALUE_INSTANCE{"Instance"};
 const std::string VALUE_RETURN{"Return"};
+const std::string VALUE_BREAK{"Break"};
+const std::string VALUE_CONTINUE{"Continue"};
 
 const std::map<char, char> REVERSE_ESCAPE_CHAR {
     {'\n', 'n'}, {'\r', 'r'},
@@ -139,6 +141,8 @@ public:
     std::string get_num() override;
     std::shared_ptr<Value>& operator[](int p);
     void push_back(std::shared_ptr<Value>);
+    std::shared_ptr<Value> insert(int p, std::shared_ptr<Value>);
+    std::shared_ptr<Value> remove(int p);
     std::shared_ptr<Value> pop_back();
     bool empty() const { return value.empty();}
     std::shared_ptr<Value>& size() { return sz = std::make_shared<TypedValue<int64_t>>(VALUE_INT, value.size());};
@@ -223,6 +227,12 @@ public:
     std::shared_ptr<Value> get_value() { return value; }
 protected:
     std::shared_ptr<Value> value;
+};
+
+class ControlValue : public Value {
+public:
+    ControlValue(const std::string& _type)
+        : Value(_type) {}
 };
 
 template class TypedValue<double>;
