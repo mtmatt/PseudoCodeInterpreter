@@ -54,8 +54,8 @@ The `dsa` library provides data-structure types:
 - `Stack`: `push`, `pop`, `peek`, `size`, `is_empty`
 - `Queue`: `enqueue`, `dequeue`, `front`, `size`, `is_empty`
 - `Tree`: `insert`, `contains`, `min`, `max`, `size`, `is_empty`
-- `RBTree`: red-black sorted set with `insert`, `contains`, `min`, `max`, `size`, `is_empty`, `root_color`
-- `BTree`: minimum-degree B-tree with `insert`, `contains`, `min`, `max`, `size`, `is_empty`, `height`
+- `RBTree`: red-black tree with `insert`, `contains`, `min`, `max`, `size`, `is_empty`, `root_color`
+- `BTree`: degree adjustable B-tree with `insert`, `contains`, `min`, `max`, `size`, `is_empty`, `height`
 - `DSU`: `make_set`, `find`, `merge`, `connected`, `size`
 
 ```pseudo
@@ -65,6 +65,39 @@ stack <- Stack()
 stack.push(10)
 print(stack.pop())
 ```
+
+## Zed Editor Support
+
+This repository includes an unpublished Zed dev extension for `.ps` files. It
+provides syntax highlighting through the bundled Tree-sitter grammar and starts
+the `pseudo-lsp` language server for diagnostics and completions.
+
+Build the interpreter and language server first:
+
+```sh
+make
+```
+
+Then install the extension in Zed:
+
+1. Open Zed.
+2. Run `zed: install dev extension` from the command palette.
+3. Select the `editors/zed` directory in this repository.
+4. Open a `.ps` file.
+
+When editing files inside this repository, the extension can launch
+`./pseudo-lsp` from the worktree. To use the extension in other projects, put
+`pseudo-lsp` on `PATH` before launching Zed:
+
+```sh
+make lsp
+sudo cp pseudo-lsp /usr/local/bin/pseudo-lsp
+```
+
+If syntax highlighting does not appear after reinstalling, run
+`zed: open log` and check for grammar compilation errors. The local grammar URL
+in `editors/zed/extension.toml` is tied to this checkout, so update it if the
+repository is moved.
 
 ## Expressions & Syntax
 
