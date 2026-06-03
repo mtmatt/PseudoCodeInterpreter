@@ -1,60 +1,88 @@
-Struct DSAListNode:
+Struct ListNode:
     value
     next
 
-    Algorithm DSAListNode constructor(value, next):
+    Algorithm ListNode constructor(value, next):
         self.value <- value
         self.next <- next
 
-Struct DSALinkedList:
-    data
+Struct LinkedList:
+    front
+    back
+    head
 
-    Algorithm DSALinkedList constructor():
-        self.data <- {}
+    Algorithm LinkedList constructor():
+        self.front <- {}
+        self.back <- {}
+        self.head <- 1
 
     Algorithm append(value):
-        self.data.push(value)
+        self.back.push(value)
         return value
 
     Algorithm prepend(value):
-        old <- self.data
-        self.data <- {}
-        self.data.push(value)
-        for i <- 1 to old.size() do
-            self.data.push(old[i])
+        self.front.push(value)
         return value
 
     Algorithm pop_front():
-        if self.data.size() = 0 then return none
-        value <- self.data[1]
-        next_data <- {}
-        for i <- 2 to self.data.size() do
-            next_data.push(self.data[i])
-        self.data <- next_data
+        if self.front.size() > 0 then return self.front.pop()
+        if self.head > self.back.size() then return none
+        value <- self.back[self.head]
+        self.head <- self.head + 1
+        self.compact()
         return value
 
     Algorithm get(index):
-        return self.data[index]
+        front_size <- self.front.size()
+        if index <= front_size then return self.front[front_size - index + 1]
+        return self.back[self.head + index - front_size - 1]
 
     Algorithm set(index, value):
-        self.data[index] <- value
+        front_size <- self.front.size()
+        if index <= front_size then
+            self.front[front_size - index + 1] <- value
+        else
+            self.back[self.head + index - front_size - 1] <- value
         return value
 
     Algorithm contains(value):
-        for i <- 1 to self.data.size() do
-            if self.data[i] = value then return true
+        i <- 1
+        while i <= self.front.size() do
+            if self.front[i] = value then return true
+            i <- i + 1
+        if self.head <= self.back.size() then
+            i <- self.head
+            while i <= self.back.size() do
+                if self.back[i] = value then return true
+                i <- i + 1
         return false
 
     Algorithm size():
-        return self.data.size()
+        back_size <- self.back.size() - self.head + 1
+        if back_size < 0 then back_size <- 0
+        return self.front.size() + back_size
 
     Algorithm is_empty():
-        return self.data.size() = 0
+        return self.size() = 0
 
-Struct DSAStack:
+    Algorithm compact():
+        if self.head > self.back.size() then
+            self.back <- {}
+            self.head <- 1
+            return none
+        if self.head <= 32 then return none
+        if self.head <= self.back.size() / 2 then return none
+        next_back <- {}
+        for i <- self.head to self.back.size() do
+            next_back.push(self.back[i])
+        self.back <- next_back
+        self.head <- 1
+        return none
+
+Struct Stack:
     data
 
-    Algorithm DSAStack constructor():
+    Algorithm Stack constructor():
         self.data <- {}
 
     Algorithm push(value):
@@ -75,39 +103,55 @@ Struct DSAStack:
     Algorithm is_empty():
         return self.data.size() = 0
 
-Struct DSAQueue:
+Struct Queue:
     data
+    head
 
-    Algorithm DSAQueue constructor():
+    Algorithm Queue constructor():
         self.data <- {}
+        self.head <- 1
 
     Algorithm enqueue(value):
         self.data.push(value)
         return value
 
     Algorithm dequeue():
-        if self.data.size() = 0 then return none
-        value <- self.data[1]
-        next_data <- {}
-        for i <- 2 to self.data.size() do
-            next_data.push(self.data[i])
-        self.data <- next_data
+        if self.head > self.data.size() then return none
+        value <- self.data[self.head]
+        self.head <- self.head + 1
+        self.compact()
         return value
 
     Algorithm front():
-        if self.data.size() = 0 then return none
-        return self.data[1]
+        if self.head > self.data.size() then return none
+        return self.data[self.head]
 
     Algorithm size():
-        return self.data.size()
+        size <- self.data.size() - self.head + 1
+        if size < 0 then return 0
+        return size
 
     Algorithm is_empty():
-        return self.data.size() = 0
+        return self.size() = 0
 
-Struct DSARBTree:
+    Algorithm compact():
+        if self.head > self.data.size() then
+            self.data <- {}
+            self.head <- 1
+            return none
+        if self.head <= 32 then return none
+        if self.head <= self.data.size() / 2 then return none
+        next_data <- {}
+        for i <- self.head to self.data.size() do
+            next_data.push(self.data[i])
+        self.data <- next_data
+        self.head <- 1
+        return none
+
+Struct Tree:
     keys
 
-    Algorithm DSARBTree constructor():
+    Algorithm Tree constructor():
         self.keys <- {}
 
     Algorithm insert(value):
@@ -139,48 +183,361 @@ Struct DSARBTree:
 
     Algorithm size():
         return self.keys.size()
+
+    Algorithm is_empty():
+        return self.keys.size() = 0
+
+Struct RBNode:
+    value
+    color
+    left
+    right
+    parent
+
+    Algorithm RBNode constructor(value, color, left, right, parent):
+        self.value <- value
+        self.color <- color
+        self.left <- left
+        self.right <- right
+        self.parent <- parent
+
+Struct RBTree:
+    root
+    root_exists
+    node_count
+
+    Algorithm RBTree constructor():
+        self.root <- 0
+        self.root_exists <- false
+        self.node_count <- 0
+
+    Algorithm is_red(node):
+        if node = 0 then return false
+        return node.color = "red"
+
+    Algorithm is_black(node):
+        return not self.is_red(node)
+
+    Algorithm rotate_left(x):
+        y <- x.right
+        x.right <- y.left
+        if y.left != 0 then
+            y.left.parent <- x
+        y.parent <- x.parent
+        if x.parent = 0 then
+            self.root <- y
+        else if x = x.parent.left then
+            x.parent.left <- y
+        else
+            x.parent.right <- y
+        y.left <- x
+        x.parent <- y
+        return none
+
+    Algorithm rotate_right(x):
+        y <- x.left
+        x.left <- y.right
+        if y.right != 0 then
+            y.right.parent <- x
+        y.parent <- x.parent
+        if x.parent = 0 then
+            self.root <- y
+        else if x = x.parent.right then
+            x.parent.right <- y
+        else
+            x.parent.left <- y
+        y.right <- x
+        x.parent <- y
+        return none
+
+    Algorithm fix_insert(node):
+        while node.parent != 0 and node.parent.color = "red" do
+            if node.parent = node.parent.parent.left then
+                uncle <- node.parent.parent.right
+                if self.is_red(uncle) then
+                    node.parent.color <- "black"
+                    uncle.color <- "black"
+                    node.parent.parent.color <- "red"
+                    node <- node.parent.parent
+                else
+                    if node = node.parent.right then
+                        node <- node.parent
+                        self.rotate_left(node)
+                    node.parent.color <- "black"
+                    node.parent.parent.color <- "red"
+                    self.rotate_right(node.parent.parent)
+            else
+                uncle <- node.parent.parent.left
+                if self.is_red(uncle) then
+                    node.parent.color <- "black"
+                    uncle.color <- "black"
+                    node.parent.parent.color <- "red"
+                    node <- node.parent.parent
+                else
+                    if node = node.parent.left then
+                        node <- node.parent
+                        self.rotate_right(node)
+                    node.parent.color <- "black"
+                    node.parent.parent.color <- "red"
+                    self.rotate_left(node.parent.parent)
+        self.root.color <- "black"
+        return none
+
+    Algorithm insert(value):
+        if self.root_exists = false then
+            self.root <- RBNode(value, "black", 0, 0, 0)
+            self.root_exists <- true
+            self.node_count <- 1
+            return value
+
+        parent <- 0
+        current <- self.root
+        while current != 0 do
+            parent <- current
+            if value = current.value then return value
+            if value < current.value then
+                current <- current.left
+            else
+                current <- current.right
+
+        node <- RBNode(value, "red", 0, 0, parent)
+        if value < parent.value then
+            parent.left <- node
+        else
+            parent.right <- node
+        self.node_count <- self.node_count + 1
+        self.fix_insert(node)
+        return value
+
+    Algorithm contains(value):
+        current <- self.root
+        while current != 0 do
+            if value = current.value then return true
+            if value < current.value then
+                current <- current.left
+            else
+                current <- current.right
+        return false
+
+    Algorithm min():
+        if self.root_exists = false then return none
+        current <- self.root
+        while current.left != 0 do
+            current <- current.left
+        return current.value
+
+    Algorithm max():
+        if self.root_exists = false then return none
+        current <- self.root
+        while current.right != 0 do
+            current <- current.right
+        return current.value
+
+    Algorithm size():
+        return self.node_count
+
+    Algorithm is_empty():
+        return self.node_count = 0
+
+    Algorithm root_color():
+        if self.root_exists = false then return "black"
+        return self.root.color
+
+Struct BTreeNode:
+    keys
+    children
+    leaf
+
+    Algorithm BTreeNode constructor(leaf):
+        self.keys <- {}
+        self.children <- {}
+        self.leaf <- leaf
+
+Struct BTree:
+    order
+    root
+    root_exists
+    node_count
+
+    Algorithm BTree constructor(order):
+        if order < 2 then order <- 2
+        self.order <- order
+        self.root <- 0
+        self.root_exists <- false
+        self.node_count <- 0
+
+    Algorithm max_keys():
+        return self.order * 2 - 1
+
+    Algorithm insert(value):
+        if self.contains(value) then return value
+        if self.root_exists = false then
+            self.root <- BTreeNode(true)
+            self.root.keys.push(value)
+            self.root_exists <- true
+            self.node_count <- 1
+            return value
+
+        if self.root.keys.size() = self.max_keys() then
+            old_root <- self.root
+            self.root <- BTreeNode(false)
+            self.root.children.push(old_root)
+            self.split_child(self.root, 1)
+
+        self.insert_nonfull(self.root, value)
+        self.node_count <- self.node_count + 1
+        return value
+
+    Algorithm contains(value):
+        if self.root_exists = false then return false
+        return self.contains_node(self.root, value)
+
+    Algorithm contains_node(node, value):
+        i <- 1
+        while i <= node.keys.size() and value > node.keys[i] do
+            i <- i + 1
+        if i <= node.keys.size() and value = node.keys[i] then return true
+        if node.leaf then return false
+        return self.contains_node(node.children[i], value)
+
+    Algorithm insert_nonfull(node, value):
+        i <- node.keys.size()
+        if node.leaf then
+            while i >= 1 and value < node.keys[i] do
+                i <- i - 1
+            node.keys.insert(i + 1, value)
+            return none
+
+        while i >= 1 and value < node.keys[i] do
+            i <- i - 1
+        i <- i + 1
+        if node.children[i].keys.size() = self.max_keys() then
+            self.split_child(node, i)
+            if value > node.keys[i] then
+                i <- i + 1
+        self.insert_nonfull(node.children[i], value)
+        return none
+
+    Algorithm split_child(parent, index):
+        t <- self.order
+        child <- parent.children[index]
+        sibling <- BTreeNode(child.leaf)
+        median <- child.keys[t]
+
+        j <- t + 1
+        while j <= child.keys.size() do
+            sibling.keys.push(child.keys[j])
+            j <- j + 1
+
+        if child.leaf = false then
+            j <- t + 1
+            while j <= child.children.size() do
+                sibling.children.push(child.children[j])
+                j <- j + 1
+
+        while child.keys.size() > t - 1 do
+            child.keys.pop()
+        while child.leaf = false and child.children.size() > t do
+            child.children.pop()
+
+        parent.children.insert(index + 1, sibling)
+        parent.keys.insert(index, median)
+        return none
+
+    Algorithm min():
+        if self.root_exists = false then return none
+        node <- self.root
+        while node.leaf = false do
+            node <- node.children[1]
+        return node.keys[1]
+
+    Algorithm max():
+        if self.root_exists = false then return none
+        node <- self.root
+        while node.leaf = false do
+            node <- node.children[node.children.size()]
+        return node.keys[node.keys.size()]
+
+    Algorithm size():
+        return self.node_count
+
+    Algorithm is_empty():
+        return self.node_count = 0
 
     Algorithm root_color():
         return "black"
 
-Struct DSABTree:
-    order
-    keys
+    Algorithm height():
+        if self.root_exists = false then return 0
+        height <- 1
+        node <- self.root
+        while node.leaf = false do
+            height <- height + 1
+            node <- node.children[1]
+        return height
 
-    Algorithm DSABTree constructor(order):
-        self.order <- order
-        self.keys <- {}
+Struct DSU:
+    values
+    parent
+    rank
+    count
 
-    Algorithm insert(value):
-        if self.contains(value) then return value
-        next_keys <- {}
-        placed <- false
-        for i <- 1 to self.keys.size() do
-            if placed = false and value < self.keys[i] then
-                next_keys.push(value)
-                placed <- true
-            next_keys.push(self.keys[i])
-        if placed = false then
-            next_keys.push(value)
-        self.keys <- next_keys
+    Algorithm DSU constructor():
+        self.values <- {}
+        self.parent <- {}
+        self.rank <- {}
+        self.count <- 0
+
+    Algorithm make_set(value):
+        if self.index_of(value) != 0 then return value
+        self.values.push(value)
+        self.parent.push(self.values.size())
+        self.rank.push(0)
+        self.count <- self.count + 1
         return value
 
-    Algorithm contains(value):
-        for i <- 1 to self.keys.size() do
-            if self.keys[i] = value then return true
-        return false
+    Algorithm index_of(value):
+        for i <- 1 to self.values.size() do
+            if self.values[i] = value then return i
+        return 0
 
-    Algorithm min():
-        if self.keys.size() = 0 then return none
-        return self.keys[1]
+    Algorithm find_index(value):
+        index <- self.index_of(value)
+        if index = 0 then
+            self.make_set(value)
+            index <- self.index_of(value)
+        parent_index <- self.parent[index]
+        if parent_index != index then
+            self.parent[index] <- self.find_index(self.values[parent_index])
+        return self.parent[index]
 
-    Algorithm max():
-        if self.keys.size() = 0 then return none
-        return self.keys[self.keys.size()]
+    Algorithm find(value):
+        return self.values[self.find_index(value)]
+
+    Algorithm merge(a, b):
+        root_a <- self.find_index(a)
+        root_b <- self.find_index(b)
+        if root_a = root_b then return self.values[root_a]
+
+        rank_a <- self.rank[root_a]
+        rank_b <- self.rank[root_b]
+
+        if rank_a < rank_b then
+            self.parent[root_a] <- root_b
+            self.count <- self.count - 1
+            return self.values[root_b]
+        if rank_a > rank_b then
+            self.parent[root_b] <- root_a
+            self.count <- self.count - 1
+            return self.values[root_a]
+
+        self.parent[root_b] <- root_a
+        self.rank[root_a] <- rank_a + 1
+        self.count <- self.count - 1
+        return self.values[root_a]
+
+    Algorithm connected(a, b):
+        return self.find_index(a) = self.find_index(b)
 
     Algorithm size():
-        return self.keys.size()
-
-    Algorithm height():
-        if self.keys.size() = 0 then return 0
-        return 1
+        return self.count

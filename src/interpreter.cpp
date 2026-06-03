@@ -100,6 +100,12 @@ std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
     if(node->get_type() == NODE_RETURN) {
         return visit_return(node);
     }
+    if(node->get_type() == NODE_BREAK) {
+        return std::make_shared<ControlValue>(VALUE_BREAK);
+    }
+    if(node->get_type() == NODE_CONTINUE) {
+        return std::make_shared<ControlValue>(VALUE_CONTINUE);
+    }
     return std::make_shared<ErrorValue>(VALUE_ERROR, "Fail to get result\n");
 }
 
@@ -178,9 +184,27 @@ std::shared_ptr<Value> Interpreter::visit_bin_op(std::shared_ptr<Node> node) {
     NodeList child = node->get_child();
     std::shared_ptr<Value> a, b;
     a = visit(child[0]);
+    if(a->get_type() == VALUE_ERROR)
+        return a;
+    if(node->get_tok()->get_type() == TOKEN_KEYWORD && node->get_tok()->get_value() == "and") {
+        if(a->as_int() == 0)
+            return std::make_shared<TypedValue<int64_t>>(VALUE_INT, 0);
+        b = visit(child[1]);
+        if(b->get_type() == VALUE_ERROR)
+            return b;
+        return std::make_shared<TypedValue<int64_t>>(VALUE_INT, b->as_int() != 0);
+    }
+    if(node->get_tok()->get_type() == TOKEN_KEYWORD && node->get_tok()->get_value() == "or") {
+        if(a->as_int() != 0)
+            return std::make_shared<TypedValue<int64_t>>(VALUE_INT, 1);
+        b = visit(child[1]);
+        if(b->get_type() == VALUE_ERROR)
+            return b;
+        return std::make_shared<TypedValue<int64_t>>(VALUE_INT, b->as_int() != 0);
+    }
     b = visit(child[1]);
-    if(a->get_type() == VALUE_ERROR || b->get_type() == VALUE_ERROR)
-        return a->get_type() == VALUE_ERROR ? a : b;
+    if(b->get_type() == VALUE_ERROR)
+        return b;
     return bin_op(a, b, node->get_tok());
 }
 
@@ -266,18 +290,20 @@ std::shared_ptr<Value> Interpreter::visit_if(std::shared_ptr<Node> node) {
         std::shared_ptr<Value> ret;
         for(auto expr : if_node->get_expr()) {
             ret = visit(expr);
-            if(ret->get_type() == VALUE_ERROR || ret->get_type() == VALUE_RETURN) {
-                return ret;
-            }
+                if(ret->get_type() == VALUE_ERROR || ret->get_type() == VALUE_RETURN ||
+                   ret->get_type() == VALUE_BREAK || ret->get_type() == VALUE_CONTINUE) {
+                    return ret;
+                }
         }
         return ret;
     } else if(!if_node->get_else().empty()) {
         std::shared_ptr<Value> ret;
         for(auto expr : if_node->get_else()) {
             ret = visit(expr);
-            if(ret->get_type() == VALUE_ERROR || ret->get_type() == VALUE_RETURN) {
-                return ret;
-            }
+                if(ret->get_type() == VALUE_ERROR || ret->get_type() == VALUE_RETURN ||
+                   ret->get_type() == VALUE_BREAK || ret->get_type() == VALUE_CONTINUE) {
+                    return ret;
+                }
         }
         return ret;
     }
@@ -390,6 +416,10 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
                 std::shared_ptr<Value> fallback = visit(child[3]);
                 if(fallback->get_type() == VALUE_ERROR || fallback->get_type() == VALUE_RETURN)
                     return fallback;
+                if(fallback->get_type() == VALUE_BREAK)
+                    goto end_for_loop;
+                if(fallback->get_type() == VALUE_CONTINUE)
+                    goto next_for_iteration;
             } else {
                 if ((*val)->get_type() == VALUE_ERROR || (*val)->get_type() == VALUE_RETURN)
                     return *val;
@@ -421,6 +451,10 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
                     failed = true;
                 } else if ((*val)->get_type() == VALUE_ERROR || (*val)->get_type() == VALUE_RETURN) {
                     return *val;
+                } else if ((*val)->get_type() == VALUE_BREAK) {
+                    goto end_for_loop;
+                } else if ((*val)->get_type() == VALUE_CONTINUE) {
+                    goto next_for_iteration;
                 } else {
                     symbol_table.set(fast_call_assign_name, *val);
                 }
@@ -440,6 +474,10 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
                 std::shared_ptr<Value> fallback = visit(child[3]);
                 if(fallback->get_type() == VALUE_ERROR || fallback->get_type() == VALUE_RETURN)
                     return fallback;
+                if(fallback->get_type() == VALUE_BREAK)
+                    goto end_for_loop;
+                if(fallback->get_type() == VALUE_CONTINUE)
+                    goto next_for_iteration;
             }
         } else if (fast_array && fast_array_index_program && fast_array_value_program) {
             std::optional<std::shared_ptr<Value>> index = fast_array_index_program->execute(symbol_table);
@@ -449,17 +487,29 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
                 std::shared_ptr<Value> fallback = visit(child[3]);
                 if(fallback->get_type() == VALUE_ERROR || fallback->get_type() == VALUE_RETURN)
                     return fallback;
+                if(fallback->get_type() == VALUE_BREAK)
+                    goto end_for_loop;
+                if(fallback->get_type() == VALUE_CONTINUE)
+                    goto next_for_iteration;
             } else {
                 if ((*index)->get_type() == VALUE_ERROR)
                     return *index;
                 if ((*val)->get_type() == VALUE_ERROR || (*val)->get_type() == VALUE_RETURN)
                     return *val;
+                if ((*val)->get_type() == VALUE_BREAK)
+                    goto end_for_loop;
+                if ((*val)->get_type() == VALUE_CONTINUE)
+                    goto next_for_iteration;
                 fast_array->operator[]((*index)->as_int()) = *val;
             }
         } else if(child.size() == 4) {
             std::shared_ptr<Value> val = visit(child[3]);
             if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
                 return val;
+            if(val->get_type() == VALUE_BREAK)
+                goto end_for_loop;
+            if(val->get_type() == VALUE_CONTINUE)
+                goto next_for_iteration;
             if (collect_loop_results) {
                 ret.push_back(val);
             }
@@ -468,11 +518,17 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
                 std::shared_ptr<Value> val{visit(child[index])};
                 if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
                     return val;
+                if(val->get_type() == VALUE_BREAK)
+                    goto end_for_loop;
+                if(val->get_type() == VALUE_CONTINUE)
+                    goto next_for_iteration;
             }
         }
+next_for_iteration:
         symbol_table.set(child[0]->get_name(), i + step);
         i = symbol_table.get(child[0]->get_name());
     }
+end_for_loop:
     if (!collect_loop_results) {
         static std::shared_ptr<Value> none = std::make_shared<Value>();
         return none;
@@ -488,17 +544,35 @@ std::shared_ptr<Value> Interpreter::visit_while(std::shared_ptr<Node> node) {
     while(visit(child[0])->as_int() == 1) {
         if(child.size() == 2) {
             std::shared_ptr<Value> val = visit(child[1]);
-            if(val->get_type() == VALUE_ERROR) 
+            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
                 return val;
+            if(val->get_type() == VALUE_BREAK)
+                break;
+            if(val->get_type() == VALUE_CONTINUE)
+                continue;
             if (collect_loop_results) {
                 ret.push_back(val);
             }
         } else {
+            bool should_continue = false;
+            bool should_break = false;
             for(int index{1}; index < child.size(); ++index) {
                 std::shared_ptr<Value> ret{visit(child[index])};
-                if(ret->get_type() == VALUE_ERROR)
+                if(ret->get_type() == VALUE_ERROR || ret->get_type() == VALUE_RETURN)
                     return ret;
+                if(ret->get_type() == VALUE_BREAK) {
+                    should_break = true;
+                    break;
+                }
+                if(ret->get_type() == VALUE_CONTINUE) {
+                    should_continue = true;
+                    break;
+                }
             }
+            if(should_break)
+                break;
+            if(should_continue)
+                continue;
         }
     }
     if (!collect_loop_results) {
@@ -514,17 +588,35 @@ std::shared_ptr<Value> Interpreter::visit_repeat(std::shared_ptr<Node> node) {
     do {
         if(child.size() == 2) {
             std::shared_ptr<Value> val = visit(child[1]);
-            if(val->get_type() == VALUE_ERROR) 
+            if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
                 return val;
+            if(val->get_type() == VALUE_BREAK)
+                break;
+            if(val->get_type() == VALUE_CONTINUE)
+                continue;
             if (collect_loop_results) {
                 ret.push_back(val);
             }
         } else {
+            bool should_continue = false;
+            bool should_break = false;
             for(int index{1}; index < child.size(); ++index) {
                 std::shared_ptr<Value> ret{visit(child[index])};
-                if(ret->get_type() == VALUE_ERROR)
+                if(ret->get_type() == VALUE_ERROR || ret->get_type() == VALUE_RETURN)
                     return ret;
+                if(ret->get_type() == VALUE_BREAK) {
+                    should_break = true;
+                    break;
+                }
+                if(ret->get_type() == VALUE_CONTINUE) {
+                    should_continue = true;
+                    break;
+                }
             }
+            if(should_break)
+                break;
+            if(should_continue)
+                continue;
         }
     } while(visit(child[0])->as_int() == 0);
     if (!collect_loop_results) {
@@ -591,7 +683,8 @@ std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(c
         method_name == "push" || method_name == "push_back" ||
         method_name == "pop" || method_name == "pop_back" ||
         method_name == "resize" || method_name == "size" ||
-        method_name == "back";
+        method_name == "back" || method_name == "insert" ||
+        method_name == "remove";
     if (!supported_method || member_child[0]->get_type() != NODE_VARACCESS) {
         return std::nullopt;
     }
@@ -631,8 +724,8 @@ std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(c
                 VALUE_ERROR, "Expect zero argument for " + method_name + "\n");
         }
         if (arr_obj->empty()) {
-            return std::make_shared<ErrorValue>(
-                VALUE_ERROR, "Cannot " + method_name + " from an empty array\n");
+            std::cout << "Cannot " << method_name << " from an empty array\n";
+            return std::make_shared<Value>();
         }
         return arr_obj->pop_back();
     }
@@ -647,22 +740,50 @@ std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(c
             return new_size_val;
         }
         if (new_size_val->get_type() != VALUE_INT) {
-            return std::make_shared<ErrorValue>(
-                VALUE_ERROR, "Argument for resize must be an integer\n");
+            std::cout << "Argument for resize must be an integer\n";
+            return std::make_shared<Value>();
         }
         long long new_size;
         try {
             new_size = new_size_val->as_int();
         } catch (const std::out_of_range&) {
-            return std::make_shared<ErrorValue>(VALUE_ERROR,
-                                                "Resize argument out of range\n");
+            std::cout << "Resize argument out of range\n";
+            return std::make_shared<Value>();
         }
         if (new_size < 0) {
-            return std::make_shared<ErrorValue>(
-                VALUE_ERROR, "Resize argument cannot be negative\n");
+            std::cout << "Resize argument cannot be negative\n";
+            return std::make_shared<Value>();
         }
         arr_obj->resize(static_cast<int>(new_size));
         return obj;
+    }
+
+    if (method_name == "insert") {
+        if (args.size() != 2) {
+            return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                                "Expect two arguments for insert\n");
+        }
+        std::shared_ptr<Value> index = visit_arg(args[0]);
+        if (index->get_type() == VALUE_ERROR) {
+            return index;
+        }
+        std::shared_ptr<Value> value = visit_arg(args[1]);
+        if (value->get_type() == VALUE_ERROR) {
+            return value;
+        }
+        return arr_obj->insert(index->as_int(), value);
+    }
+
+    if (method_name == "remove") {
+        if (args.size() != 1) {
+            return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                                "Expect one argument for remove\n");
+        }
+        std::shared_ptr<Value> index = visit_arg(args[0]);
+        if (index->get_type() == VALUE_ERROR) {
+            return index;
+        }
+        return arr_obj->remove(index->as_int());
     }
 
     if (method_name == "size") {

@@ -45,6 +45,10 @@ Notes:
 - `array_memory` exercises resize, indexed writes, indexed reads, and integer
   arithmetic.
 - `array_push_pop` exercises dynamic array growth and shrinking.
+- `rbtree_ordered_set` compares `RBTree` insert/contains/min/max against a
+  Python ordered set implemented with `bisect`.
+- `btree_ordered_set` compares `BTree` insert/contains/min/max/height against a
+  Python ordered set implemented with `bisect`.
 - Array member calls have direct native and bytecode fast paths for `push`,
   `pop`, `resize`, `size`, and `back`, avoiding bound-method allocation on hot
   paths.
