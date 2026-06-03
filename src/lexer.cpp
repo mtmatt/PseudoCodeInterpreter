@@ -19,6 +19,7 @@ const std::regex IDENTIFIER_RE(R"(^[A-Za-z_][A-Za-z0-9_]*)");
 const std::regex STRING_RE(R"(^"(?:\\.|[^"\\])*")");
 const std::regex WHITESPACE_RE(R"(^[ \t]+)");
 const std::regex NEWLINE_INDENT_RE(R"(^\n *)");
+const std::regex COMMENT_RE(R"(^//[^\n]*)");
 
 const std::vector<TokenRegex> TOKEN_REGEXES{
     {std::regex(R"(^::)"), TOKEN_SCOPE_RES},
@@ -84,12 +85,21 @@ TokenList Lexer::make_tokens() {
         Position start_pos = pos;
         std::smatch match;
 
+        if(regex_prefix(rest, COMMENT_RE, match)) {
+            advance_by(match.str());
+            continue;
+        }
+
         if(regex_prefix(rest, NEWLINE_INDENT_RE, match)) {
             const std::string lexeme = match.str();
             tokens.push_back(std::make_shared<Token>(TOKEN_NEWLINE, start_pos));
 
             const int space_num = static_cast<int>(lexeme.size()) - 1;
+            const std::string line_rest = rest.substr(lexeme.size());
             advance_by(lexeme);
+            if(line_rest.empty() || line_rest[0] == '\n' || line_rest.rfind("//", 0) == 0) {
+                continue;
+            }
             if(space_num % TAB_SIZE != 0) {
                 tokens.clear();
                 std::string error_msg = "Illegal tab size: ";
