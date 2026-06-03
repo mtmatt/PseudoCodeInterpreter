@@ -44,7 +44,7 @@ public:
     std::shared_ptr<Node> expr(int tab_expect);
     std::shared_ptr<Node> arith_expr(int tab_expect);
     std::shared_ptr<Node> comp_expr(int tab_expect);
-    std::shared_ptr<Node> array_expr(int tab_expect);
+    std::shared_ptr<Node> array_expr(int tab_expect, const std::string& closing_token = TOKEN_RIGHT_BRACE);
     std::shared_ptr<Node> if_expr(int tab_expect);
     std::shared_ptr<Node> for_expr(int tab_expect);
     std::shared_ptr<Node> while_expr(int tab_expect);

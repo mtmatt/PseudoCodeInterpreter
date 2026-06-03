@@ -1,0 +1,16 @@
+import dsa
+
+n <- 1200
+tree <- BTree(8)
+
+for i <- 1 to n do
+    value <- (i * 7919) % 100000
+    tree.insert(value)
+
+hits <- 0
+for i <- 1 to n do
+    value <- (i * 3571) % 100000
+    if tree.contains(value) then
+        hits <- hits + 1
+
+print(tree.size(), tree.min(), tree.max(), hits, tree.height())

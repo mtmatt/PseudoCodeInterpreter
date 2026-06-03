@@ -31,6 +31,7 @@
 *.out
 *.app
 shell
+pseudo-lsp
 run_tests
 
 # VsCode
@@ -41,6 +42,9 @@ run_tests
 # Build directory
 build/
 build_cov/
+editors/zed/extension.wasm
+editors/zed/grammars/
+editors/zed/target/
 
 # Coverage files
 *.gcov

@@ -123,6 +123,27 @@ void ArrayValue::push_back(std::shared_ptr<Value> new_value) {
   value.push_back(new_value);
 }
 
+std::shared_ptr<Value> ArrayValue::insert(int p, std::shared_ptr<Value> new_value) {
+  if (p < 1 || p > static_cast<int>(value.size()) + 1) {
+    return std::make_shared<ErrorValue>(
+        VALUE_ERROR, "Index out of range, size: " + std::to_string(value.size()) +
+                         ", position: " + std::to_string(p));
+  }
+  value.insert(value.begin() + (p - 1), new_value);
+  return new_value;
+}
+
+std::shared_ptr<Value> ArrayValue::remove(int p) {
+  if (p < 1 || p > static_cast<int>(value.size())) {
+    return std::make_shared<ErrorValue>(
+        VALUE_ERROR, "Index out of range, size: " + std::to_string(value.size()) +
+                         ", position: " + std::to_string(p));
+  }
+  std::shared_ptr<Value> ret = value[p - 1];
+  value.erase(value.begin() + (p - 1));
+  return ret;
+}
+
 std::shared_ptr<Value> ArrayValue::pop_back() {
   if (value.empty())
     return std::make_shared<ErrorValue>(VALUE_ERROR, "Pop an empty array");
@@ -452,12 +473,23 @@ std::shared_ptr<Value> BuiltinAlgoValue::execute(const NodeList& args,
   SymbolTable sym(parent);
   ScopeCleaner cleaner(sym);
   Interpreter interpreter(sym);
+  if (algo_name == "print") {
+    std::string output;
+    for (int i = 0; i < args.size(); ++i) {
+      std::shared_ptr<Value> arg = interpreter.visit(args[i]);
+      if (arg->get_type() == VALUE_ERROR)
+        return arg;
+      if (i > 0)
+        output += " ";
+      output += arg->get_num();
+    }
+    return execute_print(output);
+  }
+
   std::shared_ptr<Value> ret{set_args(args, sym, interpreter)};
   if (ret->get_type() == VALUE_ERROR)
     return ret;
-  if (algo_name == "print") {
-    return execute_print(sym.get(arg_names[0])->get_num());
-  } else if (algo_name == "read") {
+  if (algo_name == "read") {
     return execute_read();
   } else if (algo_name == "read_line") {
     return execute_read_line();
@@ -500,8 +532,8 @@ std::shared_ptr<Value> BoundMethodValue::execute(const NodeList& args,
             VALUE_ERROR, "Expect zero argument for " + method_name + "\n");
       }
       if (arr_obj->size()->get_num() == "0") {
-        return std::make_shared<ErrorValue>(
-            VALUE_ERROR, "Cannot " + method_name + " from an empty array\n");
+        std::cout << "Cannot " << method_name << " from an empty array\n";
+        return std::make_shared<Value>();
       }
       return arr_obj->pop_back();
     } else if (method_name == "resize") {
@@ -513,22 +545,43 @@ std::shared_ptr<Value> BoundMethodValue::execute(const NodeList& args,
       if (new_size_val->get_type() == VALUE_ERROR)
         return new_size_val;
       if (new_size_val->get_type() != VALUE_INT) {
-        return std::make_shared<ErrorValue>(
-            VALUE_ERROR, "Argument for resize must be an integer\n");
+        std::cout << "Argument for resize must be an integer\n";
+        return std::make_shared<Value>();
       }
       long long new_size;
       try {
         new_size = new_size_val->as_int();
       } catch (const std::out_of_range &oor) {
-        return std::make_shared<ErrorValue>(VALUE_ERROR,
-                                            "Resize argument out of range\n");
+        std::cout << "Resize argument out of range\n";
+        return std::make_shared<Value>();
       }
       if (new_size < 0) {
-        return std::make_shared<ErrorValue>(
-            VALUE_ERROR, "Resize argument cannot be negative\n");
+        std::cout << "Resize argument cannot be negative\n";
+        return std::make_shared<Value>();
       }
       arr_obj->resize(static_cast<int>(new_size));
       return obj;
+    } else if (method_name == "insert") {
+      if (args.size() != 2) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect two arguments for insert\n");
+      }
+      std::shared_ptr<Value> index = interpreter.visit(args[0]);
+      if (index->get_type() == VALUE_ERROR)
+        return index;
+      std::shared_ptr<Value> value = interpreter.visit(args[1]);
+      if (value->get_type() == VALUE_ERROR)
+        return value;
+      return arr_obj->insert(index->as_int(), value);
+    } else if (method_name == "remove") {
+      if (args.size() != 1) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect one argument for remove\n");
+      }
+      std::shared_ptr<Value> index = interpreter.visit(args[0]);
+      if (index->get_type() == VALUE_ERROR)
+        return index;
+      return arr_obj->remove(index->as_int());
     } else if (method_name == "size") {
       if (!args.empty()) {
         return std::make_shared<ErrorValue>(VALUE_ERROR,
@@ -739,6 +792,10 @@ std::shared_ptr<Value> operator%(std::shared_ptr<Value> a,
 
 std::shared_ptr<Value> operator==(std::shared_ptr<Value> a,
                                   std::shared_ptr<Value> b) {
+  if (a->get_type() == VALUE_INSTANCE || b->get_type() == VALUE_INSTANCE ||
+      a->get_type() == VALUE_ARRAY || b->get_type() == VALUE_ARRAY ||
+      a->get_type() == VALUE_STRUCT || b->get_type() == VALUE_STRUCT)
+    return std::make_shared<TypedValue<int64_t>>(VALUE_INT, a.get() == b.get());
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
         VALUE_INT, a->as_double() == b->as_double());
@@ -749,6 +806,10 @@ std::shared_ptr<Value> operator==(std::shared_ptr<Value> a,
 
 std::shared_ptr<Value> operator!=(std::shared_ptr<Value> a,
                                   std::shared_ptr<Value> b) {
+  if (a->get_type() == VALUE_INSTANCE || b->get_type() == VALUE_INSTANCE ||
+      a->get_type() == VALUE_ARRAY || b->get_type() == VALUE_ARRAY ||
+      a->get_type() == VALUE_STRUCT || b->get_type() == VALUE_STRUCT)
+    return std::make_shared<TypedValue<int64_t>>(VALUE_INT, a.get() != b.get());
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
     return std::make_shared<TypedValue<int64_t>>(
         VALUE_INT, a->as_double() != b->as_double());

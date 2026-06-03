@@ -21,6 +21,7 @@ Transform pseudo-code into an executable programming language.
 - **Initialization**: `arr <- {1, 2, 3}`
 - Arrays are **1-indexed**.
 - Elements of different data types can be stored in the same array.
+- Methods: `push(value)`, `pop()`, `insert(index, value)`, `remove(index)`, `resize(size)`, `size()`, `back()`.
 
 ## Built-in Functions
 
@@ -47,18 +48,20 @@ reported as errors.
 
 ## Standard Library
 
-The `dsa` library provides prefixed data-structure types:
+The `dsa` library provides data-structure types:
 
-- `DSALinkedList`: `append`, `prepend`, `pop_front`, `get`, `set`, `contains`, `size`, `is_empty`
-- `DSAStack`: `push`, `pop`, `peek`, `size`, `is_empty`
-- `DSAQueue`: `enqueue`, `dequeue`, `front`, `size`, `is_empty`
-- `DSARBTree`: `insert`, `contains`, `min`, `max`, `size`, `root_color`
-- `DSABTree`: `insert`, `contains`, `min`, `max`, `size`, `height`
+- `LinkedList`: `append`, `prepend`, `pop_front`, `get`, `set`, `contains`, `size`, `is_empty`
+- `Stack`: `push`, `pop`, `peek`, `size`, `is_empty`
+- `Queue`: `enqueue`, `dequeue`, `front`, `size`, `is_empty`
+- `Tree`: `insert`, `contains`, `min`, `max`, `size`, `is_empty`
+- `RBTree`: red-black sorted set with `insert`, `contains`, `min`, `max`, `size`, `is_empty`, `root_color`
+- `BTree`: minimum-degree B-tree with `insert`, `contains`, `min`, `max`, `size`, `is_empty`, `height`
+- `DSU`: `make_set`, `find`, `merge`, `connected`, `size`
 
 ```pseudo
 import dsa
 
-stack <- DSAStack()
+stack <- Stack()
 stack.push(10)
 print(stack.pop())
 ```
@@ -117,6 +120,8 @@ while i < 100 and i > 10 do
     i <- i * 2
     i <- i * 3 - 1
 ```
+
+Loops support `break` and `continue`.
 
 #### Repeat Statement
 - `repeat expr until condition`

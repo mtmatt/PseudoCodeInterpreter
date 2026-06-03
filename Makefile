@@ -3,8 +3,11 @@ CC = g++
 CPPFLAGS = -std=c++17 -O2
 TARGET = shell
 SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/symboltable.cpp src/jit.cpp src/interpreter.cpp src/pseudo.cpp src/shell.cpp src/error.cpp
+LSP_TARGET = pseudo-lsp
+LSP_SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/lsp.cpp
 BUILD_DIR = build
 OBJS = $(SRCS:src/%.cpp=$(BUILD_DIR)/%.o)
+LSP_OBJS = $(LSP_SRCS:src/%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(wildcard src/*.h)
 
 # Google Test configuration
@@ -19,6 +22,9 @@ TEST_TARGET = run_tests
 
 $(TARGET): $(BUILD_DIR) $(OBJS)
 	$(CC) $(CPPFLAGS) $(OBJS) -o $(TARGET)
+
+$(LSP_TARGET): $(BUILD_DIR) $(LSP_OBJS)
+	$(CC) $(CPPFLAGS) $(LSP_OBJS) -o $(LSP_TARGET)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -60,7 +66,9 @@ test: $(TEST_TARGET)
 coverage: test
 	gcov -r -o $(BUILD_COV_DIR) $(filter-out src/shell.cpp, $(SRCS))
 
-.PHONY: clean all test coverage
+.PHONY: clean all test coverage lsp
+lsp: $(LSP_TARGET)
+
 clean:
-	rm -rf $(BUILD_DIR) $(BUILD_COV_DIR) $(TARGET) $(TEST_TARGET) *.gcov
-all: clean $(TARGET)
+	rm -rf $(BUILD_DIR) $(BUILD_COV_DIR) $(TARGET) $(LSP_TARGET) $(TEST_TARGET) *.gcov
+all: clean $(TARGET) $(LSP_TARGET)
