@@ -62,6 +62,11 @@ bool push_unary_op(const std::string& token_type,
     return true;
 }
 
+bool is_array_method_call(const std::shared_ptr<Node>& node,
+                          std::string& array_name,
+                          std::string& method_name,
+                          NodeList& args);
+
 bool compile_node(const std::shared_ptr<Node>& node,
                   std::vector<JitInstruction>& instructions) {
     if (!node) return false;
@@ -87,6 +92,41 @@ bool compile_node(const std::shared_ptr<Node>& node,
         instruction.name = node->get_name();
         instructions.push_back(instruction);
         return true;
+    }
+
+    if (node_type == NODE_ARRACCESS) {
+        NodeList child = node->get_child();
+        if (child.size() != 2 || child[0]->get_type() != NODE_VARACCESS) return false;
+        if (!compile_node(child[1], instructions)) return false;
+        JitInstruction instruction{JitOp::LoadArray};
+        instruction.name = child[0]->get_name();
+        instructions.push_back(instruction);
+        return true;
+    }
+
+    if (node_type == NODE_ALGOCALL) {
+        std::string array_name;
+        std::string method_name;
+        NodeList args;
+        if (!is_array_method_call(node, array_name, method_name, args)) return false;
+
+        if (method_name == "push" || method_name == "push_back") {
+            if (args.size() != 1 || !compile_node(args[0], instructions)) return false;
+            JitInstruction instruction{JitOp::PushArray};
+            instruction.name = array_name;
+            instructions.push_back(instruction);
+            return true;
+        }
+
+        if (method_name == "pop" || method_name == "pop_back") {
+            if (!args.empty()) return false;
+            JitInstruction instruction{JitOp::PopArray};
+            instruction.name = array_name;
+            instructions.push_back(instruction);
+            return true;
+        }
+
+        return false;
     }
 
     if (node_type == NODE_BINOP) {
@@ -121,6 +161,24 @@ std::shared_ptr<Value> runtime_error(const std::string& message) {
         VALUE_ERROR, Color(0xFF, 0x39, 0x6E).get() + message + RESET);
 }
 
+bool is_array_method_call(const std::shared_ptr<Node>& node,
+                          std::string& array_name,
+                          std::string& method_name,
+                          NodeList& args) {
+    if (node->get_type() != NODE_ALGOCALL) return false;
+    AlgorithmCallNode* call_node = dynamic_cast<AlgorithmCallNode*>(node.get());
+    std::shared_ptr<Node> callee = call_node->get_call();
+    if (callee->get_type() != NODE_MEMACCESS) return false;
+    NodeList member_child = callee->get_child();
+    if (member_child.size() != 2 || member_child[0]->get_type() != NODE_VARACCESS) {
+        return false;
+    }
+    array_name = member_child[0]->get_name();
+    method_name = member_child[1]->get_name();
+    args = call_node->get_args();
+    return true;
+}
+
 } // namespace
 
 std::optional<JitProgram> ExpressionJit::compile(const std::shared_ptr<Node>& node) {
@@ -152,6 +210,44 @@ std::optional<std::shared_ptr<Value>> JitProgram::execute(SymbolTable &symbols) 
             break;
         case JitOp::LoadVar: {
             std::shared_ptr<Value> value = symbols.get(instruction.name);
+            if (value->get_type() == VALUE_ERROR) return value;
+            if (value->get_type() == VALUE_INT) stack.push_back(JitNumber::from_int(value->as_int()));
+            else if (value->get_type() == VALUE_FLOAT) stack.push_back(JitNumber::from_float(value->as_double()));
+            else return std::nullopt;
+            break;
+        }
+        case JitOp::LoadArray: {
+            std::optional<JitNumber> index = pop();
+            if (!index || index->is_float) return std::nullopt;
+            std::shared_ptr<Value> array = symbols.get(instruction.name);
+            if (array->get_type() == VALUE_ERROR) return array;
+            if (array->get_type() != VALUE_ARRAY) return std::nullopt;
+            ArrayValue* array_value = dynamic_cast<ArrayValue*>(array.get());
+            std::shared_ptr<Value> value = array_value->operator[](index->int_value);
+            if (value->get_type() == VALUE_ERROR) return value;
+            if (value->get_type() == VALUE_INT) stack.push_back(JitNumber::from_int(value->as_int()));
+            else if (value->get_type() == VALUE_FLOAT) stack.push_back(JitNumber::from_float(value->as_double()));
+            else return std::nullopt;
+            break;
+        }
+        case JitOp::PushArray: {
+            std::optional<JitNumber> number = pop();
+            if (!number) return std::nullopt;
+            std::shared_ptr<Value> array = symbols.get(instruction.name);
+            if (array->get_type() == VALUE_ERROR) return array;
+            if (array->get_type() != VALUE_ARRAY) return std::nullopt;
+            ArrayValue* array_value = dynamic_cast<ArrayValue*>(array.get());
+            array_value->push_back(to_value(*number));
+            stack.push_back(*number);
+            break;
+        }
+        case JitOp::PopArray: {
+            std::shared_ptr<Value> array = symbols.get(instruction.name);
+            if (array->get_type() == VALUE_ERROR) return array;
+            if (array->get_type() != VALUE_ARRAY) return std::nullopt;
+            ArrayValue* array_value = dynamic_cast<ArrayValue*>(array.get());
+            if (array_value->empty()) return runtime_error("Cannot pop from an empty array\n");
+            std::shared_ptr<Value> value = array_value->pop_back();
             if (value->get_type() == VALUE_ERROR) return value;
             if (value->get_type() == VALUE_INT) stack.push_back(JitNumber::from_int(value->as_int()));
             else if (value->get_type() == VALUE_FLOAT) stack.push_back(JitNumber::from_float(value->as_double()));

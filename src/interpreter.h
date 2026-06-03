@@ -15,8 +15,8 @@
 
 class Interpreter {
 public:
-    Interpreter(SymbolTable &symbols)
-        : symbol_table(symbols) {}
+    Interpreter(SymbolTable &symbols, bool _collect_loop_results = true)
+        : symbol_table(symbols), collect_loop_results(_collect_loop_results) {}
     std::shared_ptr<Value> visit(std::shared_ptr<Node>);
     std::shared_ptr<Value> visit_number(std::shared_ptr<Node>);
     std::shared_ptr<Value> visit_var_access(std::shared_ptr<Node>);
@@ -50,6 +50,7 @@ protected:
 
     SymbolTable &symbol_table;
     std::shared_ptr<Value> error, algo_call_temp;
+    bool collect_loop_results;
 };
 
 #endif

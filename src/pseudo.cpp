@@ -9,10 +9,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 /// --------------------
@@ -68,6 +71,14 @@ template <typename T> std::string TypedValue<T>::as_string() {
   } else {
     return get_num();
   }
+}
+
+template <typename T> bool TypedValue<T>::append_string(const std::string& suffix) {
+  if constexpr (std::is_same_v<T, std::string>) {
+    value += suffix;
+    return true;
+  }
+  return false;
 }
 
 template <typename T> std::string TypedValue<T>::repr() {
@@ -142,15 +153,21 @@ std::shared_ptr<Value> BaseAlgoValue::set_args(const NodeList &args, SymbolTable
 
   for (int i = 0; i < args.size(); ++i) {
     std::shared_ptr<Value> v = interpreter.visit(args[i]);
+    if (v->get_type() == VALUE_ERROR)
+      return v;
     sym.set(arg_names[i], v);
   }
-  return std::make_shared<Value>();
+  static std::shared_ptr<Value> none = std::make_shared<Value>();
+  return none;
 }
 
 class ScopeCleaner {
 public:
     ScopeCleaner(SymbolTable& _sym) : sym(_sym) {}
     ~ScopeCleaner() {
+        if (!sym.has_instances()) {
+            return;
+        }
         for (auto const& [name, val] : sym.get_symbols()) {
             if (val->get_type() == VALUE_INSTANCE) {
                 if (val.use_count() == 1) {
@@ -168,13 +185,255 @@ private:
     SymbolTable& sym;
 };
 
+namespace {
+
+bool is_pure_numeric_node(const std::shared_ptr<Node>& node,
+                          const std::string& algo_name,
+                          const std::unordered_set<std::string>& arg_names) {
+  if (!node)
+    return false;
+
+  const std::string type = node->get_type();
+  if (type == NODE_VALUE) {
+    const std::string token_type = node->get_tok()->get_type();
+    return token_type == TOKEN_INT || token_type == TOKEN_FLOAT;
+  }
+  if (type == NODE_VARACCESS) {
+    return arg_names.count(node->get_name()) != 0;
+  }
+  if (type == NODE_BINOP) {
+    NodeList child = node->get_child();
+    return child.size() == 2 &&
+           is_pure_numeric_node(child[0], algo_name, arg_names) &&
+           is_pure_numeric_node(child[1], algo_name, arg_names);
+  }
+  if (type == NODE_UNARYOP) {
+    NodeList child = node->get_child();
+    return child.size() == 1 &&
+           is_pure_numeric_node(child[0], algo_name, arg_names);
+  }
+  if (type == NODE_RETURN) {
+    NodeList child = node->get_child();
+    return child.size() == 1 &&
+           is_pure_numeric_node(child[0], algo_name, arg_names);
+  }
+  if (type == NODE_IF) {
+    IfNode* if_node = dynamic_cast<IfNode*>(node.get());
+    if (!is_pure_numeric_node(if_node->get_condition(), algo_name, arg_names))
+      return false;
+    for (const auto& expr : if_node->get_expr()) {
+      if (!is_pure_numeric_node(expr, algo_name, arg_names))
+        return false;
+    }
+    for (const auto& expr : if_node->get_else()) {
+      if (!is_pure_numeric_node(expr, algo_name, arg_names))
+        return false;
+    }
+    return true;
+  }
+  if (type == NODE_ALGOCALL) {
+    AlgorithmCallNode* call_node = dynamic_cast<AlgorithmCallNode*>(node.get());
+    if (call_node->get_call()->get_type() != NODE_VARACCESS ||
+        call_node->get_name() != algo_name) {
+      return false;
+    }
+    for (const auto& arg : call_node->get_args()) {
+      if (!is_pure_numeric_node(arg, algo_name, arg_names))
+        return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+bool has_self_call(const std::shared_ptr<Node>& node, const std::string& algo_name) {
+  if (!node)
+    return false;
+
+  if (node->get_type() == NODE_ALGOCALL) {
+    AlgorithmCallNode* call_node = dynamic_cast<AlgorithmCallNode*>(node.get());
+    if (call_node->get_call()->get_type() == NODE_VARACCESS &&
+        call_node->get_name() == algo_name) {
+      return true;
+    }
+    for (const auto& arg : call_node->get_args()) {
+      if (has_self_call(arg, algo_name))
+        return true;
+    }
+    return false;
+  }
+
+  if (node->get_type() == NODE_IF) {
+    IfNode* if_node = dynamic_cast<IfNode*>(node.get());
+    if (has_self_call(if_node->get_condition(), algo_name))
+      return true;
+    for (const auto& expr : if_node->get_expr()) {
+      if (has_self_call(expr, algo_name))
+        return true;
+    }
+    for (const auto& expr : if_node->get_else()) {
+      if (has_self_call(expr, algo_name))
+        return true;
+    }
+    return false;
+  }
+
+  for (const auto& child : node->get_child()) {
+    if (has_self_call(child, algo_name))
+      return true;
+  }
+  return false;
+}
+
+bool is_memoizable_numeric_algo(const std::shared_ptr<Node>& node,
+                                const std::string& algo_name,
+                                const std::vector<std::string>& args) {
+  AlgorithmDefNode* algo_node = dynamic_cast<AlgorithmDefNode*>(node.get());
+  if (!algo_node || args.empty())
+    return false;
+
+  bool recursive = false;
+  std::unordered_set<std::string> arg_set(args.begin(), args.end());
+  for (const auto& expr : algo_node->get_body()) {
+    if (!is_pure_numeric_node(expr, algo_name, arg_set))
+      return false;
+    recursive = recursive || has_self_call(expr, algo_name);
+  }
+  return recursive;
+}
+
+std::shared_ptr<Node> single_return_numeric_expr(const std::shared_ptr<Node>& node,
+                                                 const std::string& algo_name,
+                                                 const std::vector<std::string>& args) {
+  AlgorithmDefNode* algo_node = dynamic_cast<AlgorithmDefNode*>(node.get());
+  if (!algo_node || algo_node->get_body().size() != 1)
+    return nullptr;
+
+  std::shared_ptr<Node> ret = algo_node->get_body()[0];
+  if (ret->get_type() != NODE_RETURN || has_self_call(ret, algo_name))
+    return nullptr;
+
+  NodeList child = ret->get_child();
+  if (child.size() != 1)
+    return nullptr;
+
+  std::unordered_set<std::string> arg_set(args.begin(), args.end());
+  if (!is_pure_numeric_node(child[0], algo_name, arg_set))
+    return nullptr;
+  return child[0];
+}
+
+std::string numeric_cache_key(const ValueList& values) {
+  std::string key;
+  for (const auto& value : values) {
+    if (value->get_type() != VALUE_INT && value->get_type() != VALUE_FLOAT)
+      return "";
+    key += value->get_type();
+    key += ':';
+    key += value->get_num();
+    key += '|';
+  }
+  return key;
+}
+
+} // namespace
+
 std::shared_ptr<Value> AlgoValue::execute(const NodeList& args, SymbolTable *parent) {
+  static std::unordered_map<std::size_t, bool> memoizable_by_node;
+  static std::unordered_map<std::size_t,
+      std::unordered_map<std::string, std::shared_ptr<Value>>> memoized_results;
+  static std::unordered_map<std::size_t, JitProgram> single_return_jit;
+  static std::unordered_set<std::size_t> single_return_jit_disabled;
+
   SymbolTable sym(parent);
   ScopeCleaner cleaner(sym);
   Interpreter interpreter(sym);
+  const std::size_t node_id = value->get_id();
+  auto memoizable_found = memoizable_by_node.find(node_id);
+  if (memoizable_found == memoizable_by_node.end()) {
+    memoizable_found = memoizable_by_node.emplace(
+        node_id, is_memoizable_numeric_algo(value, algo_name, arg_names)).first;
+  }
+
+  if (memoizable_found->second) {
+    if (args.size() < arg_names.size()) {
+      return std::make_shared<ErrorValue>(
+          VALUE_ERROR, Color(0xFF, 0x39, 0x6E).get() + "Too few arguments" RESET);
+    } else if (args.size() > arg_names.size()) {
+      return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                          Color(0xFF, 0x39, 0x6E).get() +
+                                              "Too many arguments" RESET);
+    }
+
+    ValueList evaluated_args;
+    evaluated_args.reserve(args.size());
+    for (int i = 0; i < args.size(); ++i) {
+      std::shared_ptr<Value> arg = interpreter.visit(args[i]);
+      if (arg->get_type() == VALUE_ERROR)
+        return arg;
+      evaluated_args.push_back(arg);
+    }
+
+    const std::string cache_key = numeric_cache_key(evaluated_args);
+    if (!cache_key.empty()) {
+      auto& cache = memoized_results[node_id];
+      auto cached = cache.find(cache_key);
+      if (cached != cache.end()) {
+        return cached->second;
+      }
+
+      for (int i = 0; i < evaluated_args.size(); ++i) {
+        sym.set(arg_names[i], evaluated_args[i]);
+      }
+
+      AlgorithmDefNode* algo_node = dynamic_cast<AlgorithmDefNode*>(value.get());
+      const NodeList& algo_body = algo_node->get_body();
+      std::shared_ptr<Value> ret = std::make_shared<Value>();
+      for (int i = 0; i < algo_body.size(); ++i) {
+        ret = interpreter.visit(algo_body[i]);
+        if (ret->get_type() == VALUE_RETURN) {
+          ret = dynamic_cast<ReturnValue*>(ret.get())->get_value();
+          break;
+        }
+        if (ret->get_type() == VALUE_ERROR) {
+          return ret;
+        }
+      }
+      if (ret->get_type() == VALUE_INT || ret->get_type() == VALUE_FLOAT) {
+        cache[cache_key] = ret;
+      }
+      return ret;
+    }
+  }
+
   std::shared_ptr<Value> ret{set_args(args, sym, interpreter)};
   if (ret->get_type() == VALUE_ERROR)
     return ret;
+
+  if (!single_return_jit_disabled.count(node_id)) {
+    auto compiled = single_return_jit.find(node_id);
+    if (compiled == single_return_jit.end()) {
+      std::shared_ptr<Node> return_expr =
+          single_return_numeric_expr(value, algo_name, arg_names);
+      if (return_expr) {
+        std::optional<JitProgram> program = ExpressionJit::compile(return_expr);
+        if (program) {
+          compiled = single_return_jit.emplace(node_id, std::move(*program)).first;
+        } else {
+          single_return_jit_disabled.insert(node_id);
+        }
+      } else {
+        single_return_jit_disabled.insert(node_id);
+      }
+    }
+    if (compiled != single_return_jit.end()) {
+      std::optional<std::shared_ptr<Value>> jit_result = compiled->second.execute(sym);
+      if (jit_result) {
+        return *jit_result;
+      }
+    }
+  }
 
   AlgorithmDefNode* algo_node = dynamic_cast<AlgorithmDefNode*>(value.get());
   const NodeList& algo_body = algo_node->get_body();
@@ -906,7 +1165,7 @@ std::string run(std::string file_name, std::string text,
     }
   }
 
-  Interpreter interpreter(global_symbol_table);
+  Interpreter interpreter(global_symbol_table, file_name == "stdin");
   ArrayValue *ret{new ArrayValue(ValueList(0))};
   for (auto node : ast) {
     ret->push_back(interpreter.visit(node));

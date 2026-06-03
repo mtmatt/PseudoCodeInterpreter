@@ -16,7 +16,31 @@ constexpr int JIT_HOT_THRESHOLD = 8;
 
 bool is_jit_root(const std::shared_ptr<Node>& node) {
     if (!node) return false;
-    return node->get_type() == NODE_BINOP || node->get_type() == NODE_UNARYOP;
+    return node->get_type() == NODE_BINOP || node->get_type() == NODE_UNARYOP ||
+           node->get_type() == NODE_ALGOCALL;
+}
+
+bool has_assignment_node(const std::shared_ptr<Node>& node) {
+    if (!node) return false;
+    const std::string type = node->get_type();
+    if (type == NODE_VARASSIGN || type == NODE_ARRASSIGN) {
+        return true;
+    }
+    if (type == NODE_IF) {
+        IfNode* if_node = dynamic_cast<IfNode*>(node.get());
+        if (has_assignment_node(if_node->get_condition())) return true;
+        for (const auto& expr : if_node->get_expr()) {
+            if (has_assignment_node(expr)) return true;
+        }
+        for (const auto& expr : if_node->get_else()) {
+            if (has_assignment_node(expr)) return true;
+        }
+        return false;
+    }
+    for (const auto& child : node->get_child()) {
+        if (has_assignment_node(child)) return true;
+    }
+    return false;
 }
 } // namespace
 
@@ -128,6 +152,21 @@ std::shared_ptr<Value> Interpreter::visit_var_access(std::shared_ptr<Node> node)
 std::shared_ptr<Value> Interpreter::visit_var_assign(std::shared_ptr<Node> node) {
     NodeList child = node->get_child();
     std::string var_name = node->get_name();
+    if (child[0]->get_type() == NODE_BINOP && child[0]->get_tok()->get_type() == TOKEN_ADD) {
+        NodeList add_child = child[0]->get_child();
+        if (add_child[0]->get_type() == NODE_VARACCESS && add_child[0]->get_name() == var_name) {
+            std::shared_ptr<Value> current = symbol_table.get(var_name);
+            if (current->get_type() == VALUE_STRING && current.use_count() <= 2) {
+                std::shared_ptr<Value> suffix = visit(add_child[1]);
+                if (suffix->get_type() == VALUE_ERROR) {
+                    return suffix;
+                }
+                if (suffix->get_type() == VALUE_STRING && current->append_string(suffix->as_string())) {
+                    return current;
+                }
+            }
+        }
+    }
     std::shared_ptr<Value> value = visit(child[0]);
     if(value->get_type() == VALUE_ERROR)
         return value;
@@ -275,13 +314,155 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
         return std::make_shared<ErrorValue>(VALUE_ERROR, "Infinite for loop\n");
     }
 
+    std::string fast_assign_name;
+    std::optional<JitProgram> fast_assign_program;
+    std::string fast_array_name;
+    std::optional<JitProgram> fast_array_index_program;
+    std::optional<JitProgram> fast_array_value_program;
+    ArrayValue* fast_array = nullptr;
+    std::string fast_call_assign_name;
+    std::vector<std::string> fast_call_arg_names;
+    std::vector<JitProgram> fast_call_arg_programs;
+    std::optional<JitProgram> fast_call_body_program;
+    if (!collect_loop_results && child.size() == 4) {
+        if (child[3]->get_type() == NODE_VARASSIGN) {
+            NodeList assign_child = child[3]->get_child();
+            fast_assign_name = child[3]->get_name();
+            fast_assign_program = ExpressionJit::compile(assign_child[0]);
+            if (!fast_assign_program && assign_child[0]->get_type() == NODE_ALGOCALL) {
+                AlgorithmCallNode* call_node = dynamic_cast<AlgorithmCallNode*>(assign_child[0].get());
+                if (call_node->get_call()->get_type() == NODE_VARACCESS) {
+                    std::shared_ptr<Value> callee = symbol_table.get(call_node->get_name());
+                    AlgoValue* algo = dynamic_cast<AlgoValue*>(callee.get());
+                    if (algo) {
+                        AlgorithmDefNode* algo_node =
+                            dynamic_cast<AlgorithmDefNode*>(algo->get_node_ptr().get());
+                        if (algo_node && algo_node->get_body().size() == 1 &&
+                            algo_node->get_body()[0]->get_type() == NODE_RETURN &&
+                            call_node->get_args().size() == algo->get_arg_names().size()) {
+                            NodeList return_child = algo_node->get_body()[0]->get_child();
+                            fast_call_body_program = ExpressionJit::compile(return_child[0]);
+                            if (fast_call_body_program) {
+                                bool args_compiled = true;
+                                for (const auto& arg : call_node->get_args()) {
+                                    std::optional<JitProgram> arg_program = ExpressionJit::compile(arg);
+                                    if (!arg_program) {
+                                        args_compiled = false;
+                                        break;
+                                    }
+                                    fast_call_arg_programs.push_back(std::move(*arg_program));
+                                }
+                                if (args_compiled) {
+                                    fast_call_assign_name = child[3]->get_name();
+                                    fast_call_arg_names = algo->get_arg_names();
+                                } else {
+                                    fast_call_body_program.reset();
+                                    fast_call_arg_programs.clear();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (child[3]->get_type() == NODE_ARRASSIGN) {
+            NodeList assign_child = child[3]->get_child();
+            if (assign_child[0]->get_type() == NODE_ARRACCESS) {
+                NodeList access_child = assign_child[0]->get_child();
+                if (access_child[0]->get_type() == NODE_VARACCESS) {
+                    std::shared_ptr<Value> array = symbol_table.get(access_child[0]->get_name());
+                    if (array->get_type() == VALUE_ARRAY) {
+                        fast_array_name = access_child[0]->get_name();
+                        fast_array = dynamic_cast<ArrayValue*>(array.get());
+                        fast_array_index_program = ExpressionJit::compile(access_child[1]);
+                        fast_array_value_program = ExpressionJit::compile(assign_child[1]);
+                    }
+                }
+            }
+        }
+    }
+
     ValueList ret;
     while(condition(i, end_value)) {
-        if(child.size() == 4) {
+        if (fast_assign_program) {
+            std::optional<std::shared_ptr<Value>> val = fast_assign_program->execute(symbol_table);
+            if (!val) {
+                fast_assign_program.reset();
+                std::shared_ptr<Value> fallback = visit(child[3]);
+                if(fallback->get_type() == VALUE_ERROR || fallback->get_type() == VALUE_RETURN)
+                    return fallback;
+            } else {
+                if ((*val)->get_type() == VALUE_ERROR || (*val)->get_type() == VALUE_RETURN)
+                    return *val;
+                symbol_table.set(fast_assign_name, *val);
+            }
+        } else if (fast_call_body_program) {
+            ValueList saved_values;
+            std::vector<bool> had_saved_values;
+            bool failed = false;
+            for (int arg_index = 0; arg_index < fast_call_arg_programs.size(); ++arg_index) {
+                std::optional<std::shared_ptr<Value>> arg =
+                    fast_call_arg_programs[arg_index].execute(symbol_table);
+                if (!arg || (*arg)->get_type() == VALUE_ERROR) {
+                    if (arg && (*arg)->get_type() == VALUE_ERROR)
+                        return *arg;
+                    failed = true;
+                    break;
+                }
+                const std::string& arg_name = fast_call_arg_names[arg_index];
+                had_saved_values.push_back(symbol_table.contains_local(arg_name));
+                saved_values.push_back(symbol_table.get_local(arg_name));
+                symbol_table.set(arg_name, *arg);
+            }
+
+            if (!failed) {
+                std::optional<std::shared_ptr<Value>> val =
+                    fast_call_body_program->execute(symbol_table);
+                if (!val) {
+                    failed = true;
+                } else if ((*val)->get_type() == VALUE_ERROR || (*val)->get_type() == VALUE_RETURN) {
+                    return *val;
+                } else {
+                    symbol_table.set(fast_call_assign_name, *val);
+                }
+            }
+
+            for (int arg_index = static_cast<int>(had_saved_values.size()) - 1;
+                 arg_index >= 0; --arg_index) {
+                if (had_saved_values[arg_index]) {
+                    symbol_table.set(fast_call_arg_names[arg_index], saved_values[arg_index]);
+                } else {
+                    symbol_table.erase(fast_call_arg_names[arg_index]);
+                }
+            }
+
+            if (failed) {
+                fast_call_body_program.reset();
+                std::shared_ptr<Value> fallback = visit(child[3]);
+                if(fallback->get_type() == VALUE_ERROR || fallback->get_type() == VALUE_RETURN)
+                    return fallback;
+            }
+        } else if (fast_array && fast_array_index_program && fast_array_value_program) {
+            std::optional<std::shared_ptr<Value>> index = fast_array_index_program->execute(symbol_table);
+            std::optional<std::shared_ptr<Value>> val = fast_array_value_program->execute(symbol_table);
+            if (!index || !val) {
+                fast_array = nullptr;
+                std::shared_ptr<Value> fallback = visit(child[3]);
+                if(fallback->get_type() == VALUE_ERROR || fallback->get_type() == VALUE_RETURN)
+                    return fallback;
+            } else {
+                if ((*index)->get_type() == VALUE_ERROR)
+                    return *index;
+                if ((*val)->get_type() == VALUE_ERROR || (*val)->get_type() == VALUE_RETURN)
+                    return *val;
+                fast_array->operator[]((*index)->as_int()) = *val;
+            }
+        } else if(child.size() == 4) {
             std::shared_ptr<Value> val = visit(child[3]);
             if(val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) 
                 return val;
-            ret.push_back(val);
+            if (collect_loop_results) {
+                ret.push_back(val);
+            }
         } else {
             for(int index{3}; index < child.size(); ++index) {
                 std::shared_ptr<Value> val{visit(child[index])};
@@ -291,6 +472,10 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
         }
         symbol_table.set(child[0]->get_name(), i + step);
         i = symbol_table.get(child[0]->get_name());
+    }
+    if (!collect_loop_results) {
+        static std::shared_ptr<Value> none = std::make_shared<Value>();
+        return none;
     }
     if(child.size() != 4)
         ret.push_back(std::make_shared<Value>());
@@ -302,9 +487,12 @@ std::shared_ptr<Value> Interpreter::visit_while(std::shared_ptr<Node> node) {
     ValueList ret;
     while(visit(child[0])->as_int() == 1) {
         if(child.size() == 2) {
-            ret.push_back(visit(child[1]));
-            if(ret.back()->get_type() == VALUE_ERROR) 
-                return ret.back();
+            std::shared_ptr<Value> val = visit(child[1]);
+            if(val->get_type() == VALUE_ERROR) 
+                return val;
+            if (collect_loop_results) {
+                ret.push_back(val);
+            }
         } else {
             for(int index{1}; index < child.size(); ++index) {
                 std::shared_ptr<Value> ret{visit(child[index])};
@@ -312,6 +500,10 @@ std::shared_ptr<Value> Interpreter::visit_while(std::shared_ptr<Node> node) {
                     return ret;
             }
         }
+    }
+    if (!collect_loop_results) {
+        static std::shared_ptr<Value> none = std::make_shared<Value>();
+        return none;
     }
     return std::make_shared<ArrayValue>(ret);
 }
@@ -321,9 +513,12 @@ std::shared_ptr<Value> Interpreter::visit_repeat(std::shared_ptr<Node> node) {
     ValueList ret;
     do {
         if(child.size() == 2) {
-            ret.push_back(visit(child[1]));
-            if(ret.back()->get_type() == VALUE_ERROR) 
-                return ret.back();
+            std::shared_ptr<Value> val = visit(child[1]);
+            if(val->get_type() == VALUE_ERROR) 
+                return val;
+            if (collect_loop_results) {
+                ret.push_back(val);
+            }
         } else {
             for(int index{1}; index < child.size(); ++index) {
                 std::shared_ptr<Value> ret{visit(child[index])};
@@ -332,6 +527,10 @@ std::shared_ptr<Value> Interpreter::visit_repeat(std::shared_ptr<Node> node) {
             }
         }
     } while(visit(child[0])->as_int() == 0);
+    if (!collect_loop_results) {
+        static std::shared_ptr<Value> none = std::make_shared<Value>();
+        return none;
+    }
     return std::make_shared<ArrayValue>(ret);
 }
 
@@ -403,15 +602,22 @@ std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(c
     }
     ArrayValue *arr_obj = dynamic_cast<ArrayValue *>(obj.get());
     const NodeList& args = algo_call_node->get_args();
-    SymbolTable arg_scope(&symbol_table);
-    Interpreter arg_interpreter(arg_scope);
+
+    auto visit_arg = [this](const std::shared_ptr<Node>& arg) -> std::shared_ptr<Value> {
+        if (!has_assignment_node(arg)) {
+            return visit(arg);
+        }
+        SymbolTable arg_scope(&symbol_table);
+        Interpreter arg_interpreter(arg_scope, collect_loop_results);
+        return arg_interpreter.visit(arg);
+    };
 
     if (method_name == "push" || method_name == "push_back") {
         if (args.size() != 1) {
             return std::make_shared<ErrorValue>(
                 VALUE_ERROR, "Expect one argument for " + method_name + "\n");
         }
-        std::shared_ptr<Value> arg = arg_interpreter.visit(args[0]);
+        std::shared_ptr<Value> arg = visit_arg(args[0]);
         if (arg->get_type() == VALUE_ERROR) {
             return arg;
         }
@@ -436,7 +642,7 @@ std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(c
             return std::make_shared<ErrorValue>(VALUE_ERROR,
                                                 "Expect one argument for resize\n");
         }
-        std::shared_ptr<Value> new_size_val = arg_interpreter.visit(args[0]);
+        std::shared_ptr<Value> new_size_val = visit_arg(args[0]);
         if (new_size_val->get_type() == VALUE_ERROR) {
             return new_size_val;
         }

@@ -5,6 +5,7 @@ TARGET = shell
 SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/symboltable.cpp src/jit.cpp src/interpreter.cpp src/pseudo.cpp src/shell.cpp src/error.cpp
 BUILD_DIR = build
 OBJS = $(SRCS:src/%.cpp=$(BUILD_DIR)/%.o)
+HEADERS = $(wildcard src/*.h)
 
 # Google Test configuration
 GTEST_DIR = googletest/googletest
@@ -26,14 +27,14 @@ $(BUILD_COV_DIR):
 	mkdir -p $(BUILD_COV_DIR)
 
 # Normal build rules
-$(BUILD_DIR)/shell.o:	src/shell.cpp src/interpreter.h src/pseudo.h
+$(BUILD_DIR)/shell.o:	src/shell.cpp $(HEADERS)
 	$(CC) -c $(CPPFLAGS) src/shell.cpp -o $@
 
-$(BUILD_DIR)/%.o: src/%.cpp
+$(BUILD_DIR)/%.o: src/%.cpp $(HEADERS)
 	$(CC) -c $(CPPFLAGS) $< -o $@
 
 # Coverage build rules
-$(BUILD_COV_DIR)/%.o: src/%.cpp | $(BUILD_COV_DIR)
+$(BUILD_COV_DIR)/%.o: src/%.cpp $(HEADERS) | $(BUILD_COV_DIR)
 	$(CC) -c $(TEST_CPPFLAGS) $< -o $@
 
 run : $(TARGET)

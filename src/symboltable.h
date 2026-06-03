@@ -8,6 +8,7 @@
 #include "node.h"
 #include "value.h"
 #include <map>
+#include <unordered_map>
 #include <string>
 #include <memory>
 
@@ -45,14 +46,18 @@ class SymbolTable {
 public:
     SymbolTable(SymbolTable *_parent = nullptr)
         : parent(_parent) {}
-    std::shared_ptr<Value> get(std::string);
-    void set(std::string, std::shared_ptr<Value>);
-    void erase(std::string);
-    const std::map<std::string, std::shared_ptr<Value>>& get_symbols() const { return symbols; }
+    std::shared_ptr<Value> get(const std::string&);
+    void set(const std::string&, std::shared_ptr<Value>);
+    void erase(const std::string&);
+    bool contains_local(const std::string&) const;
+    std::shared_ptr<Value> get_local(const std::string&) const;
+    const std::unordered_map<std::string, std::shared_ptr<Value>>& get_symbols() const { return symbols; }
     SymbolTable* get_parent() const { return parent; }
+    bool has_instances() const { return contains_instance; }
 protected:
-    std::map<std::string, std::shared_ptr<Value>> symbols;
+    std::unordered_map<std::string, std::shared_ptr<Value>> symbols;
     SymbolTable *parent;
+    bool contains_instance{false};
 };
 
 #endif
