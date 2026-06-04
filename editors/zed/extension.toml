@@ -4,12 +4,12 @@ version = "0.0.1"
 schema_version = 1
 authors = ["PseudoCodeInterpreter contributors"]
 description = "PseudoCode language support."
-repository = "https://github.com/pseudocode-interpreter/pseudocode-interpreter"
+repository = "https://github.com/mtmatt/PseudoCodeInterpreter"
 
 [language_servers.pseudo-lsp]
 name = "PseudoCode LSP"
 languages = ["PseudoCode"]
 
 [grammars.pseudocode]
-repository = "file:///Users/matt/Programming/PseudoCodeInterpreter/editors/zed/tree-sitter-pseudocode"
-commit = "c41c42d0cf4e2b587ab7a1a177eaf2851fd89291"
+repository = "https://github.com/mtmatt/tree-sitter-pseudocode"
+commit = "6027e71677aa97846c1080044fdc09367185eb31"

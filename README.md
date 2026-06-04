@@ -95,9 +95,9 @@ sudo cp pseudo-lsp /usr/local/bin/pseudo-lsp
 ```
 
 If syntax highlighting does not appear after reinstalling, run
-`zed: open log` and check for grammar compilation errors. The local grammar URL
-in `editors/zed/extension.toml` is tied to this checkout, so update it if the
-repository is moved.
+`zed: open log` and check for grammar compilation errors. The Tree-sitter
+grammar lives in the `editors/zed/tree-sitter-pseudocode` submodule and is
+pinned in `editors/zed/extension.toml`.
 
 ## Expressions & Syntax
 

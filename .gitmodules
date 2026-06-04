@@ -1,3 +1,6 @@
 [submodule "googletest"]
 	path = googletest
 	url = https://github.com/google/googletest
+[submodule "editors/zed/tree-sitter-pseudocode"]
+	path = editors/zed/tree-sitter-pseudocode
+	url = https://github.com/mtmatt/tree-sitter-pseudocode
