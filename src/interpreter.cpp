@@ -228,6 +228,24 @@ std::shared_ptr<Value> Interpreter::visit_array(std::shared_ptr<Node> node) {
 std::shared_ptr<Value>& Interpreter::visit_array_access(std::shared_ptr<Node> node) {
     NodeList child{node->get_child()};
     std::shared_ptr<Value> arr{visit(child[0])}, index{visit(child[1])};
+    if(arr->get_type() == VALUE_STRING) {
+        std::string str = arr->as_string();
+        int p = index->as_int();
+        if (1 <= p && p <= static_cast<int>(str.size())) {
+            error = std::make_shared<TypedValue<std::string>>(
+                VALUE_STRING, std::string(1, str[p - 1]));
+        } else {
+            error = std::make_shared<ErrorValue>(
+                VALUE_ERROR, "Index out of range, size: " + std::to_string(str.size()) +
+                             ", position: " + std::to_string(p));
+        }
+        return error;
+    }
+    if(arr->get_type() == VALUE_HASH_TABLE) {
+        algo_call_temp = arr;
+        error = dynamic_cast<HashTableValue*>(arr.get())->get(index);
+        return error;
+    }
     if(arr->get_type() != VALUE_ARRAY) {
         error = std::make_shared<ErrorValue>(VALUE_ERROR, "Access can only apply on array, find " + 
             arr->get_type() + "\n");
@@ -260,6 +278,15 @@ std::shared_ptr<Value> Interpreter::visit_array_assign(std::shared_ptr<Node> nod
     } else if(child[0]->get_type() != NODE_ARRACCESS) {
         return std::make_shared<ErrorValue>(VALUE_ERROR, "Access can only apply on array or object member\n");
     }
+    NodeList access_child{child[0]->get_child()};
+    std::shared_ptr<Value> obj{visit(access_child[0])};
+    if (obj->get_type() == VALUE_HASH_TABLE) {
+        std::shared_ptr<Value> key{visit(access_child[1])};
+        if (key->get_type() == VALUE_ERROR) return key;
+        std::shared_ptr<Value> value{visit(child[1])};
+        if (value->get_type() == VALUE_ERROR) return value;
+        return dynamic_cast<HashTableValue*>(obj.get())->set(key, value);
+    }
     std::shared_ptr<Value> &arr{visit_array_access(child[0])}, value{visit(child[1])};
     return arr = value;
 }
@@ -269,7 +296,8 @@ std::shared_ptr<Value> Interpreter::visit_member_access(std::shared_ptr<Node> no
     std::shared_ptr<Value> obj{visit(child[0])};
     std::shared_ptr<Node> &member{child[1]};
 
-    if(obj->get_type() == VALUE_ARRAY) {
+    if(obj->get_type() == VALUE_ARRAY || obj->get_type() == VALUE_STRING ||
+       obj->get_type() == VALUE_HASH_TABLE) {
         std::string member_name = member->get_name();
         return std::make_shared<BoundMethodValue>(obj, member_name);
     } else if (obj->get_type() == VALUE_INSTANCE) {

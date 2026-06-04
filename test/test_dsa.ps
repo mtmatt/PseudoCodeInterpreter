@@ -41,6 +41,21 @@ if queue.dequeue() != 3 then failures <- failures + 1
 if queue.dequeue() != none then failures <- failures + 1
 if queue.is_empty() != true then failures <- failures + 1
 
+table <- HashTable()
+if table.size() != 0 then failures <- failures + 1
+table.set("name", "pseudo")
+table["count"] <- 2
+table["count"] <- table["count"] + 1
+if table.get("name") != "pseudo" then failures <- failures + 1
+if table["count"] != 3 then failures <- failures + 1
+if table.contains("missing") != false then failures <- failures + 1
+if table.contains("name") != true then failures <- failures + 1
+if table.remove("name") != "pseudo" then failures <- failures + 1
+if table.contains("name") != false then failures <- failures + 1
+if table.size() != 1 then failures <- failures + 1
+table.clear()
+if table.is_empty() != true then failures <- failures + 1
+
 tree <- Tree()
 tree.insert(8)
 tree.insert(3)

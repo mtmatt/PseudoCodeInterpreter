@@ -275,11 +275,43 @@ TEST(InterpreterTest, TestArray) {
     check_interpreter("a <- {1, 2}; a.resize(\"abc\"); a.size()", "2");
 }
 
+TEST(InterpreterTest, TestStringIndexAndSize) {
+    check_interpreter("\"abc\".size()", "3");
+    check_interpreter("\"abc\"[2]", "b", VALUE_STRING);
+    check_interpreter(
+        "Algorithm IsValidParentheses(str):\n"
+        "    stack <- {}\n"
+        "    for i <- 1 to str.size() do\n"
+        "        char <- str[i]\n"
+        "        if char = \"(\" then\n"
+        "            stack.push(char)\n"
+        "        else\n"
+        "            if stack.size() = 0 then\n"
+        "                return false\n"
+        "            stack.pop()\n"
+        "    return stack.size() = 0\n"
+        "IsValidParentheses(\"()\")",
+        "1");
+}
+
 TEST(InterpreterTest, TestBuiltin) {
     check_interpreter("int(\"123\")", "123", VALUE_INT);
     check_interpreter("float(\"12.34\")", "12.34", VALUE_FLOAT);
     check_interpreter("string(123)", "123", VALUE_STRING);
     check_interpreter("print(\"x\", 1)", "NONE", VALUE_NONE);
+}
+
+TEST(InterpreterTest, TestHashTable) {
+    check_interpreter("h <- HashTable(); h.size()", "0");
+    check_interpreter("h <- HashTable(); h.set(\"a\", 1); h.get(\"a\")", "1");
+    check_interpreter("h <- HashTable(); h[\"a\"] <- 1; h[\"a\"] <- h[\"a\"] + 1; h[\"a\"]", "2");
+    check_interpreter("h <- HashTable(); h.contains(\"missing\")", "0");
+    check_interpreter("h <- HashTable(); h.set(\"a\", 1); h.contains(\"a\")", "1");
+    check_interpreter("h <- HashTable(); h.set(\"a\", 1); h.remove(\"a\")", "1");
+    check_interpreter("h <- HashTable(); h.get(\"missing\")", "NONE", VALUE_NONE);
+    check_interpreter("h <- HashTable(); h[1] <- \"one\"; h[1]", "one", VALUE_STRING);
+    check_interpreter("h <- HashTable(); h.is_empty()", "1");
+    check_interpreter("h <- HashTable(); h.set(\"a\", 1); h.clear(); h.is_empty()", "1");
 }
 
 TEST(InterpreterTest, TestInvalidNumericString) {

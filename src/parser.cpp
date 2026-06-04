@@ -510,7 +510,8 @@ std::shared_ptr<Node> Parser::call(int tab_expect) {
     while(true) {
         if(current_tok->get_type() == TOKEN_DOT) {
             advance();
-            if(current_tok->get_type() != TOKEN_IDENTIFIER) {
+            if(current_tok->get_type() != TOKEN_IDENTIFIER &&
+               current_tok->get_type() != TOKEN_BUILTIN_ALGO) {
                  std::string error_msg = "Expected an identifier after \".\"";
                  std::shared_ptr<Token> error_token = std::make_shared<ErrorToken>(TOKEN_ERROR, current_tok->get_pos(), error_msg);
                  return std::make_shared<ErrorNode>(error_token);
