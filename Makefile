@@ -1,7 +1,7 @@
 VPATH = src
 CC = g++
 CPPFLAGS = -std=c++17 -O2
-TARGET = shell
+TARGET = pseudo
 SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/symboltable.cpp src/jit.cpp src/interpreter.cpp src/pseudo.cpp src/shell.cpp src/error.cpp
 LSP_TARGET = pseudo-lsp
 LSP_SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/lsp.cpp
@@ -72,3 +72,6 @@ lsp: $(LSP_TARGET)
 clean:
 	rm -rf $(BUILD_DIR) $(BUILD_COV_DIR) $(TARGET) $(LSP_TARGET) $(TEST_TARGET) *.gcov
 all: clean $(TARGET) $(LSP_TARGET)
+install:
+	cp $(TARGET) /usr/local/bin/
+	cp $(LSP_TARGET) /usr/local/bin/

@@ -18,6 +18,13 @@ queue.enqueue(8)
 print(queue.dequeue())
 print(queue.front())
 
+table <- HashTable()
+table.set("name", "pseudo")
+table["count"] <- 3
+print(table.get("name"))
+print(table["count"])
+print(table.contains("missing"))
+
 rb <- RBTree()
 rb.insert(5)
 rb.insert(2)

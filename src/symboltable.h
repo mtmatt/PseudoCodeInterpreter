@@ -40,6 +40,9 @@ const std::map<std::string, std::shared_ptr<Value>> BUILTIN_ALGOS {
     {"string", std::make_shared<BuiltinAlgoValue>("string", 
         std::make_shared<AlgorithmDefNode>(std::make_shared<TypedToken<std::string>>(TOKEN_STRING, Position(), "string"), 
         TokenList{std::make_shared<TypedToken<std::string>>(TOKEN_STRING, Position(), "s")}))}, 
+    {"HashTable", std::make_shared<BuiltinAlgoValue>("HashTable",
+        std::make_shared<AlgorithmDefNode>(std::make_shared<TypedToken<std::string>>(TOKEN_STRING, Position(), "HashTable"),
+        TokenList{}))},
 };
 
 class SymbolTable {

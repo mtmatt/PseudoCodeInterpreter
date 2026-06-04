@@ -9,6 +9,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <unordered_map>
 #include <cstdint>
 #include "node.h"
 
@@ -19,6 +20,7 @@ const std::string VALUE_ALGO{"Algo"};
 const std::string VALUE_STRING{"Str"};
 const std::string VALUE_ERROR{"ERROR"};
 const std::string VALUE_ARRAY{"Array"};
+const std::string VALUE_HASH_TABLE{"HashTable"};
 const std::string VALUE_STRUCT{"Struct"};
 const std::string VALUE_INSTANCE{"Instance"};
 const std::string VALUE_RETURN{"Return"};
@@ -167,6 +169,33 @@ public:
     std::shared_ptr<Value> sz, error;
 protected:
     ValueList value;
+};
+
+class HashTableValue: public Value {
+public:
+    HashTableValue()
+        : Value(VALUE_HASH_TABLE) {}
+    std::string get_num() override;
+    std::string repr() override { return get_num(); }
+    std::shared_ptr<Value> get(std::shared_ptr<Value> key);
+    std::shared_ptr<Value> set(std::shared_ptr<Value> key, std::shared_ptr<Value> value);
+    std::shared_ptr<Value> remove(std::shared_ptr<Value> key);
+    bool contains(std::shared_ptr<Value> key) const;
+    std::shared_ptr<Value> size() const;
+    std::shared_ptr<Value> keys() const;
+    std::shared_ptr<Value> values() const;
+    void clear();
+
+protected:
+    struct Entry {
+        std::shared_ptr<Value> key;
+        std::shared_ptr<Value> value;
+    };
+
+    std::string key_id(std::shared_ptr<Value> key) const;
+
+    std::vector<Entry> entries;
+    std::unordered_map<std::string, size_t> index;
 };
 
 std::shared_ptr<Value> operator+(std::shared_ptr<Value>, std::shared_ptr<Value>);

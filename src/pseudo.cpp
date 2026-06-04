@@ -161,6 +161,99 @@ std::shared_ptr<Value> &ArrayValue::operator[](int p) {
   return error;
 }
 
+std::string HashTableValue::key_id(std::shared_ptr<Value> key) const {
+  if (key->get_type() == VALUE_ARRAY || key->get_type() == VALUE_INSTANCE ||
+      key->get_type() == VALUE_STRUCT || key->get_type() == VALUE_HASH_TABLE ||
+      key->get_type() == VALUE_ALGO) {
+    return key->get_type() + ":ptr:" +
+           std::to_string(reinterpret_cast<std::uintptr_t>(key.get()));
+  }
+  return key->get_type() + ":" + key->repr();
+}
+
+std::string HashTableValue::get_num() {
+  std::stringstream ss;
+  ss << "{";
+  if (!entries.empty()) {
+    ss << entries[0].key->repr() << ": " << entries[0].value->repr();
+  }
+  for (size_t i = 1; i < entries.size(); ++i) {
+    ss << ", " << entries[i].key->repr() << ": " << entries[i].value->repr();
+  }
+  ss << "}";
+  return ss.str();
+}
+
+std::shared_ptr<Value> HashTableValue::get(std::shared_ptr<Value> key) {
+  auto found = index.find(key_id(key));
+  if (found == index.end()) {
+    return std::make_shared<Value>();
+  }
+  return entries[found->second].value;
+}
+
+std::shared_ptr<Value> HashTableValue::set(std::shared_ptr<Value> key,
+                                           std::shared_ptr<Value> value) {
+  std::string id = key_id(key);
+  auto found = index.find(id);
+  if (found != index.end()) {
+    entries[found->second].value = value;
+    return value;
+  }
+  index[id] = entries.size();
+  entries.push_back({key, value});
+  return value;
+}
+
+std::shared_ptr<Value> HashTableValue::remove(std::shared_ptr<Value> key) {
+  std::string id = key_id(key);
+  auto found = index.find(id);
+  if (found == index.end()) {
+    return std::make_shared<Value>();
+  }
+
+  size_t removed = found->second;
+  std::shared_ptr<Value> value = entries[removed].value;
+  index.erase(found);
+  if (removed != entries.size() - 1) {
+    entries[removed] = entries.back();
+    index[key_id(entries[removed].key)] = removed;
+  }
+  entries.pop_back();
+  return value;
+}
+
+bool HashTableValue::contains(std::shared_ptr<Value> key) const {
+  return index.count(key_id(key)) != 0;
+}
+
+std::shared_ptr<Value> HashTableValue::size() const {
+  return std::make_shared<TypedValue<int64_t>>(VALUE_INT, entries.size());
+}
+
+std::shared_ptr<Value> HashTableValue::keys() const {
+  ValueList keys;
+  keys.reserve(entries.size());
+  for (const Entry& entry : entries) {
+    keys.push_back(entry.key);
+  }
+  return std::make_shared<ArrayValue>(keys);
+}
+
+std::shared_ptr<Value> HashTableValue::values() const {
+  ValueList values;
+  values.reserve(entries.size());
+  for (const Entry& entry : entries) {
+    values.push_back(entry.value);
+  }
+  return std::make_shared<ArrayValue>(values);
+}
+
+void HashTableValue::clear() {
+  entries.clear();
+  index.clear();
+}
+
 std::shared_ptr<Value> BaseAlgoValue::set_args(const NodeList &args, SymbolTable &sym,
                                                Interpreter &interpreter) {
   if (args.size() < arg_names.size()) {
@@ -505,6 +598,8 @@ std::shared_ptr<Value> BuiltinAlgoValue::execute(const NodeList& args,
     return execute_float(sym.get(arg_names[0])->get_num());
   } else if (algo_name == "string") {
     return execute_string(sym.get(arg_names[0])->get_num());
+  } else if (algo_name == "HashTable") {
+    return std::make_shared<HashTableValue>();
   }
   return ret;
 }
@@ -598,6 +693,93 @@ std::shared_ptr<Value> BoundMethodValue::execute(const NodeList& args,
             VALUE_ERROR, "Cannot call back on an empty array\n");
       }
       return arr_obj->back();
+    }
+  } else if (obj->get_type() == VALUE_STRING) {
+    if (method_name == "size") {
+      if (!args.empty()) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect zero argument for size\n");
+      }
+      return std::make_shared<TypedValue<int64_t>>(
+          VALUE_INT, static_cast<int64_t>(obj->as_string().size()));
+    }
+  } else if (obj->get_type() == VALUE_HASH_TABLE) {
+    HashTableValue *table_obj = dynamic_cast<HashTableValue *>(obj.get());
+    SymbolTable sym(parent);
+    Interpreter interpreter(sym);
+
+    if (method_name == "set") {
+      if (args.size() != 2) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect two arguments for set\n");
+      }
+      std::shared_ptr<Value> key = interpreter.visit(args[0]);
+      if (key->get_type() == VALUE_ERROR)
+        return key;
+      std::shared_ptr<Value> value = interpreter.visit(args[1]);
+      if (value->get_type() == VALUE_ERROR)
+        return value;
+      return table_obj->set(key, value);
+    } else if (method_name == "get") {
+      if (args.size() != 1) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect one argument for get\n");
+      }
+      std::shared_ptr<Value> key = interpreter.visit(args[0]);
+      if (key->get_type() == VALUE_ERROR)
+        return key;
+      return table_obj->get(key);
+    } else if (method_name == "contains") {
+      if (args.size() != 1) {
+        return std::make_shared<ErrorValue>(
+            VALUE_ERROR, "Expect one argument for contains\n");
+      }
+      std::shared_ptr<Value> key = interpreter.visit(args[0]);
+      if (key->get_type() == VALUE_ERROR)
+        return key;
+      return std::make_shared<TypedValue<int64_t>>(VALUE_INT,
+                                                   table_obj->contains(key));
+    } else if (method_name == "remove") {
+      if (args.size() != 1) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect one argument for remove\n");
+      }
+      std::shared_ptr<Value> key = interpreter.visit(args[0]);
+      if (key->get_type() == VALUE_ERROR)
+        return key;
+      return table_obj->remove(key);
+    } else if (method_name == "size") {
+      if (!args.empty()) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect zero argument for size\n");
+      }
+      return table_obj->size();
+    } else if (method_name == "is_empty") {
+      if (!args.empty()) {
+        return std::make_shared<ErrorValue>(
+            VALUE_ERROR, "Expect zero argument for is_empty\n");
+      }
+      return std::make_shared<TypedValue<int64_t>>(
+          VALUE_INT, table_obj->size()->as_int() == 0);
+    } else if (method_name == "keys") {
+      if (!args.empty()) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect zero argument for keys\n");
+      }
+      return table_obj->keys();
+    } else if (method_name == "values") {
+      if (!args.empty()) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect zero argument for values\n");
+      }
+      return table_obj->values();
+    } else if (method_name == "clear") {
+      if (!args.empty()) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                            "Expect zero argument for clear\n");
+      }
+      table_obj->clear();
+      return obj;
     }
   } else if (obj->get_type() == VALUE_INSTANCE) {
     InstanceValue *inst_obj = dynamic_cast<InstanceValue *>(obj.get());
@@ -794,6 +976,7 @@ std::shared_ptr<Value> operator==(std::shared_ptr<Value> a,
                                   std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_INSTANCE || b->get_type() == VALUE_INSTANCE ||
       a->get_type() == VALUE_ARRAY || b->get_type() == VALUE_ARRAY ||
+      a->get_type() == VALUE_HASH_TABLE || b->get_type() == VALUE_HASH_TABLE ||
       a->get_type() == VALUE_STRUCT || b->get_type() == VALUE_STRUCT)
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT, a.get() == b.get());
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
@@ -808,6 +991,7 @@ std::shared_ptr<Value> operator!=(std::shared_ptr<Value> a,
                                   std::shared_ptr<Value> b) {
   if (a->get_type() == VALUE_INSTANCE || b->get_type() == VALUE_INSTANCE ||
       a->get_type() == VALUE_ARRAY || b->get_type() == VALUE_ARRAY ||
+      a->get_type() == VALUE_HASH_TABLE || b->get_type() == VALUE_HASH_TABLE ||
       a->get_type() == VALUE_STRUCT || b->get_type() == VALUE_STRUCT)
     return std::make_shared<TypedValue<int64_t>>(VALUE_INT, a.get() != b.get());
   if (a->get_type() == VALUE_FLOAT || b->get_type() == VALUE_FLOAT)
