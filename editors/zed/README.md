@@ -34,9 +34,9 @@ zed .
 Use `zed: open log` if highlighting or diagnostics do not load. Grammar
 compilation errors and language-server launch failures are reported there.
 
-The local Tree-sitter grammar URL in `extension.toml` is absolute for this
-checkout. If you move the repository, update `[grammars.pseudocode].repository`
-and commit the grammar repo before reinstalling the dev extension.
+The Tree-sitter grammar is stored as the `tree-sitter-pseudocode` submodule and
+is pinned by commit in `extension.toml`. If you update the grammar, push the
+grammar repository first, then update `[grammars.pseudocode].commit`.
 
 If installation fails after an earlier attempt, reinstall the dev extension from
 Zed. The generated checkout under `editors/zed/grammars` can be removed safely.
