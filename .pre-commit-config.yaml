@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: clang-format
+        entry: bash ci/clang-format-check.sh
+        language: system
+        files: '\.(c|cc|cpp|h)$'
+        exclude: '^(googletest/|editors/zed/grammars/pseudocode/src/parser\.c$)'
+
+      - id: clang-tidy
+        name: clang-tidy
+        entry: bash ci/clang-tidy-check.sh
+        language: system
+        files: '^(src|test)/.*\.cpp$'
