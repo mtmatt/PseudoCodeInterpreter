@@ -44,6 +44,9 @@ build/
 build_cov/
 editors/zed/extension.wasm
 editors/zed/grammars/
+!editors/zed/grammars/
+editors/zed/grammars/*
+!editors/zed/grammars/pseudocode
 editors/zed/target/
 
 # Coverage files

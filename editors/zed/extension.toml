@@ -12,4 +12,4 @@ languages = ["PseudoCode"]
 
 [grammars.pseudocode]
 repository = "https://github.com/mtmatt/tree-sitter-pseudocode"
-commit = "6027e71677aa97846c1080044fdc09367185eb31"
+rev = "6027e71677aa97846c1080044fdc09367185eb31"
