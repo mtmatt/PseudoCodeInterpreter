@@ -41,7 +41,7 @@ class Node {
    public:
     Node() : node_id(next_node_id.fetch_add(1, std::memory_order_relaxed)) {}
     virtual std::string get_node() = 0;
-    virtual ~Node() {};
+    virtual ~Node() {}
     virtual std::vector<std::shared_ptr<Node>> get_child() {
         return std::vector<std::shared_ptr<Node>>(0);
     }
