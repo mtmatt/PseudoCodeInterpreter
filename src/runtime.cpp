@@ -4,11 +4,13 @@
 
 #include "runtime.h"
 
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "color.h"
@@ -178,7 +180,7 @@ Value* rt_bin_op(int64_t op, Value* a, Value* b) {
         case RT_OP_MOD:
             return track(lhs % rhs);
         case RT_OP_POW:
-            return track(pow(lhs, rhs));
+            return track(pow(lhs, rhs));  // NOLINT(misc-include-cleaner): value.h overload
         case RT_OP_EQUAL:
             return track(lhs == rhs);
         case RT_OP_NEQ:

@@ -9,15 +9,22 @@
 
 #include "compiler.h"
 
+#include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/GlobalVariable.h>
 #include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Instructions.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
+#include <llvm/Support/Casting.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -133,7 +140,7 @@ class CodeGen {
     // runtime Value) or nullptr when the node terminated the current block
     // (break/continue/return) or reported a compile error.
     llvm::Value* gen(const std::shared_ptr<Node>& node) {
-        const std::string type = node->get_type();
+        std::string type = node->get_type();
         if (type == NODE_VALUE) return gen_literal(node);
         if (type == NODE_VARACCESS) return gen_var_access(node);
         if (type == NODE_VARASSIGN) return gen_var_assign(node);
@@ -419,7 +426,7 @@ class CodeGen {
         if (end == nullptr) return nullptr;
         builder.CreateCall(get_rt("rt_for_step_check", builder.getVoidTy(), {ptr_ty}), {step});
 
-        const std::string var_name = child[0]->get_name();
+        std::string var_name = child[0]->get_name();
         llvm::AllocaInst* slot = entry_alloca(ptr_ty);
         builder.CreateStore(init, slot);
 
@@ -518,7 +525,7 @@ class CodeGen {
     /// ---- functions and calls ----
 
     llvm::Value* gen_algo_def(const std::shared_ptr<Node>& node) {
-        const std::string name = node->get_name();
+        std::string name = node->get_name();
         if (name.find("::") != std::string::npos) {
             error("compile error: Struct is not supported by the compiler yet", node);
             return nullptr;
@@ -560,7 +567,7 @@ class CodeGen {
         auto* names_global =
             new llvm::GlobalVariable(module, names_ty, true, llvm::GlobalValue::PrivateLinkage,
                                      llvm::ConstantArray::get(names_ty, name_ptrs), "args");
-        const bool memoizable = is_memoizable_numeric_algo(node, name, arg_names);
+        bool memoizable = is_memoizable_numeric_algo(node, name, arg_names);
         return builder.CreateCall(
             get_rt("rt_define_algo", ptr_ty, {ptr_ty, ptr_ty, ptr_ty, i64_ty, i64_ty}),
             {cstring(name), fn, names_global,

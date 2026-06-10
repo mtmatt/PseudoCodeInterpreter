@@ -4,13 +4,22 @@
 
 #include "interpreter.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <memory>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
+#include "jit.h"
 #include "node.h"
+#include "token.h"
 #include "value.h"
 
 namespace {
@@ -24,7 +33,7 @@ bool is_jit_root(const std::shared_ptr<Node>& node) {
 
 bool has_assignment_node(const std::shared_ptr<Node>& node) {
     if (!node) return false;
-    const std::string type = node->get_type();
+    std::string type = node->get_type();
     if (type == NODE_VARASSIGN || type == NODE_ARRASSIGN) {
         return true;
     }
@@ -687,8 +696,8 @@ std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(
     }
 
     NodeList member_child = call_node->get_child();
-    const std::string method_name = member_child[1]->get_name();
-    const bool supported_method =
+    std::string method_name = member_child[1]->get_name();
+    bool supported_method =
         method_name == "push" || method_name == "push_back" || method_name == "pop" ||
         method_name == "pop_back" || method_name == "resize" || method_name == "size" ||
         method_name == "back" || method_name == "insert" || method_name == "remove";
@@ -824,7 +833,7 @@ std::shared_ptr<Value> Interpreter::bin_op(std::shared_ptr<Value> a, std::shared
     else if (op->get_type() == TOKEN_MOD)
         return a % b;
     else if (op->get_type() == TOKEN_POW)
-        return pow(a, b);
+        return pow(a, b);  // NOLINT(misc-include-cleaner): value.h overload
     else if (op->get_type() == TOKEN_EQUAL)
         return a == b;
     else if (op->get_type() == TOKEN_NEQ)
