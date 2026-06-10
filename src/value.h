@@ -5,12 +5,13 @@
 #ifndef VALUE_H
 #define VALUE_H
 
-#include <string>
-#include <vector>
-#include <memory>
-#include <map>
-#include <unordered_map>
 #include <cstdint>
+#include <map>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 #include "node.h"
 
 const std::string VALUE_NONE{"NONE"};
@@ -27,41 +28,37 @@ const std::string VALUE_RETURN{"Return"};
 const std::string VALUE_BREAK{"Break"};
 const std::string VALUE_CONTINUE{"Continue"};
 
-const std::map<char, char> REVERSE_ESCAPE_CHAR {
-    {'\n', 'n'}, {'\r', 'r'},
-    {'\b', 'b'}, {'\"', '\"'},
-    {'\'', '\''}, {'\\', '\\'},
-    {'\t', 't'}
-};
+const std::map<char, char> REVERSE_ESCAPE_CHAR{
+    {'\n', 'n'}, {'\r', 'r'}, {'\b', 'b'}, {'\"', '\"'}, {'\'', '\''}, {'\\', '\\'}, {'\t', 't'}};
 
 class SymbolTable;
 class Interpreter;
-class Value: public std::enable_shared_from_this<Value> {
-public:
-    Value(const std::string& _type = VALUE_NONE)
-        : type(_type) {}
-    virtual std::string get_num() { return type;}
-    virtual std::string repr() { return type;}
-    virtual std::string get_type(){ return type;}
+class Value : public std::enable_shared_from_this<Value> {
+   public:
+    Value(const std::string& _type = VALUE_NONE) : type(_type) {}
+    virtual std::string get_num() { return type; }
+    virtual std::string repr() { return type; }
+    virtual std::string get_type() { return type; }
     virtual int64_t as_int();
     virtual double as_double();
     virtual std::string as_string();
     virtual bool append_string(const std::string&) { return false; }
-    virtual std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr)
-        { return std::make_shared<Value>();};
-    friend std::ostream& operator<<(std::ostream &out, Value &token);
-    
-protected:
+    virtual std::shared_ptr<Value> execute(const NodeList& args = {},
+                                           SymbolTable* parent = nullptr) {
+        return std::make_shared<Value>();
+    };
+    friend std::ostream& operator<<(std::ostream& out, Value& token);
+
+   protected:
     std::string type;
 };
 
 using ValueList = std::vector<std::shared_ptr<Value>>;
 
-template<typename T>
-class TypedValue: public Value {
-public:
-    TypedValue(const std::string& _type, const T &_value) 
-        : Value(_type), value(_value) {}
+template <typename T>
+class TypedValue : public Value {
+   public:
+    TypedValue(const std::string& _type, const T& _value) : Value(_type), value(_value) {}
     std::string get_num() override;
     std::string repr() override;
     int64_t as_int() override;
@@ -69,50 +66,53 @@ public:
     std::string as_string() override;
     bool append_string(const std::string&) override;
 
-protected:
+   protected:
     T value;
 };
 
 using ErrorValue = TypedValue<std::string>;
 
-class BaseAlgoValue: public Value {
-public:
-    BaseAlgoValue(const std::string &_algo_name, std::shared_ptr<Node> _value) 
+class BaseAlgoValue : public Value {
+   public:
+    BaseAlgoValue(const std::string& _algo_name, std::shared_ptr<Node> _value)
         : Value(VALUE_ALGO), value(_value), algo_name(_algo_name) {
         for (const auto& tok : value->get_toks()) {
             arg_names.push_back(tok->get_value());
         }
     }
-    std::string get_num() override { return algo_name;}
+    std::string get_num() override { return algo_name; }
     virtual std::shared_ptr<Value> set_args(const NodeList&, SymbolTable&, Interpreter&);
-    std::string repr() override { return get_num();}
+    std::string repr() override { return get_num(); }
 
-protected:
+   protected:
     std::string algo_name;
     std::shared_ptr<Node> value;
     std::vector<std::string> arg_names;
 };
 
-class AlgoValue: public BaseAlgoValue {
-public:
-    AlgoValue(const std::string &_algo_name, std::shared_ptr<Node> _value) 
+class AlgoValue : public BaseAlgoValue {
+   public:
+    AlgoValue(const std::string& _algo_name, std::shared_ptr<Node> _value)
         : BaseAlgoValue(_algo_name, _value) {}
-    std::string get_num() override { return algo_name;}
-    std::string repr() override { return get_num();}
-    std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr) override;
+    std::string get_num() override { return algo_name; }
+    std::string repr() override { return get_num(); }
+    std::shared_ptr<Value> execute(const NodeList& args = {},
+                                   SymbolTable* parent = nullptr) override;
     friend class BoundMethodValue;
     // Expose value for friends/derived or public use if needed for method binding
     std::shared_ptr<Node> get_node_ptr() { return value; }
     const std::vector<std::string>& get_arg_names() const { return arg_names; }
-protected:
+
+   protected:
 };
 
-class BuiltinAlgoValue: public BaseAlgoValue {
-public:
-    BuiltinAlgoValue(const std::string &_algo_name, std::shared_ptr<Node> _value) 
+class BuiltinAlgoValue : public BaseAlgoValue {
+   public:
+    BuiltinAlgoValue(const std::string& _algo_name, std::shared_ptr<Node> _value)
         : BaseAlgoValue(_algo_name, _value) {}
-    std::string get_num() override { return algo_name;}
-    std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr) override;
+    std::string get_num() override { return algo_name; }
+    std::shared_ptr<Value> execute(const NodeList& args = {},
+                                   SymbolTable* parent = nullptr) override;
     std::shared_ptr<Value> execute_print(const std::string&);
     std::shared_ptr<Value> execute_read();
     std::shared_ptr<Value> execute_read_line();
@@ -120,36 +120,40 @@ public:
     std::shared_ptr<Value> execute_int(const std::string&);
     std::shared_ptr<Value> execute_float(const std::string&);
     std::shared_ptr<Value> execute_string(const std::string&);
-    std::string repr() override { return get_num();}
-protected:
+    std::string repr() override { return get_num(); }
+
+   protected:
 };
 
 class BoundMethodValue : public Value {
-public:
+   public:
     BoundMethodValue(std::shared_ptr<Value> _obj, std::string _method_name)
         : Value(VALUE_ALGO), obj(_obj), method_name(_method_name) {}
-    std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr) override;
+    std::shared_ptr<Value> execute(const NodeList& args = {},
+                                   SymbolTable* parent = nullptr) override;
     std::string get_num() override { return method_name; }
     std::string repr() override { return "<Bound Method " + method_name + ">"; }
-protected:
+
+   protected:
     std::shared_ptr<Value> obj;
     std::string method_name;
 };
 
-class ArrayValue: public Value {
-public:
-    ArrayValue(ValueList _value) 
-        : Value(VALUE_ARRAY), value(_value) {}
+class ArrayValue : public Value {
+   public:
+    ArrayValue(ValueList _value) : Value(VALUE_ARRAY), value(_value) {}
     std::string get_num() override;
     std::shared_ptr<Value>& operator[](int p);
     void push_back(std::shared_ptr<Value>);
     std::shared_ptr<Value> insert(int p, std::shared_ptr<Value>);
     std::shared_ptr<Value> remove(int p);
     std::shared_ptr<Value> pop_back();
-    bool empty() const { return value.empty();}
-    std::shared_ptr<Value>& size() { return sz = std::make_shared<TypedValue<int64_t>>(VALUE_INT, value.size());};
-    std::shared_ptr<Value>& back() { return value.back();};
-    std::string repr() override { return get_num();}
+    bool empty() const { return value.empty(); }
+    std::shared_ptr<Value>& size() {
+        return sz = std::make_shared<TypedValue<int64_t>>(VALUE_INT, value.size());
+    };
+    std::shared_ptr<Value>& back() { return value.back(); };
+    std::string repr() override { return get_num(); }
 
     void resize(int new_size) {
         if (new_size < 0) {
@@ -161,20 +165,20 @@ public:
             size_t old_size = value.size();
             value.resize(new_size);
             for (size_t i = old_size; i < static_cast<size_t>(new_size); ++i) {
-                value[i] = std::make_shared<Value>(); // Fill with default Value
+                value[i] = std::make_shared<Value>();  // Fill with default Value
             }
         }
     }
 
     std::shared_ptr<Value> sz, error;
-protected:
+
+   protected:
     ValueList value;
 };
 
-class HashTableValue: public Value {
-public:
-    HashTableValue()
-        : Value(VALUE_HASH_TABLE) {}
+class HashTableValue : public Value {
+   public:
+    HashTableValue() : Value(VALUE_HASH_TABLE) {}
     std::string get_num() override;
     std::string repr() override { return get_num(); }
     std::shared_ptr<Value> get(std::shared_ptr<Value> key);
@@ -186,7 +190,7 @@ public:
     std::shared_ptr<Value> values() const;
     void clear();
 
-protected:
+   protected:
     struct Entry {
         std::shared_ptr<Value> key;
         std::shared_ptr<Value> value;
@@ -219,8 +223,9 @@ std::shared_ptr<Value> operator-(std::shared_ptr<Value>);
 std::shared_ptr<Value> operator!(std::shared_ptr<Value>);
 
 class StructValue : public Value {
-public:
-    StructValue(const std::string& _name, const std::vector<std::string>& _members, const std::map<std::string, std::shared_ptr<Value>>& _methods)
+   public:
+    StructValue(const std::string& _name, const std::vector<std::string>& _members,
+                const std::map<std::string, std::shared_ptr<Value>>& _methods)
         : Value(VALUE_STRUCT), name(_name), members(_members), methods(_methods) {}
 
     std::string get_num() override { return name; }
@@ -229,18 +234,20 @@ public:
     std::vector<std::string> members;
     std::map<std::string, std::shared_ptr<Value>> methods;
     std::string name;
-    std::shared_ptr<Value> execute(const NodeList& args = {}, SymbolTable *parent = nullptr) override;
+    std::shared_ptr<Value> execute(const NodeList& args = {},
+                                   SymbolTable* parent = nullptr) override;
 };
 
 class InstanceValue : public Value {
-public:
+   public:
     InstanceValue(std::shared_ptr<StructValue> _struct_def)
         : Value(VALUE_INSTANCE), struct_def(_struct_def) {}
 
     std::string get_num() override { return struct_def->name + " Instance"; }
     std::string repr() override { return "<Instance of " + struct_def->name + ">"; }
 
-    std::shared_ptr<Value> get_member(const std::string& name, std::shared_ptr<Value> self = nullptr);
+    std::shared_ptr<Value> get_member(const std::string& name,
+                                      std::shared_ptr<Value> self = nullptr);
     void set_member(const std::string& name, std::shared_ptr<Value> val);
 
     std::shared_ptr<StructValue> struct_def;
@@ -248,32 +255,31 @@ public:
 };
 
 class ReturnValue : public Value {
-public:
-    ReturnValue(std::shared_ptr<Value> _value)
-        : Value(VALUE_RETURN), value(_value) {}
+   public:
+    ReturnValue(std::shared_ptr<Value> _value) : Value(VALUE_RETURN), value(_value) {}
     std::string get_num() override { return value->get_num(); }
     std::string repr() override { return value->repr(); }
     std::shared_ptr<Value> get_value() { return value; }
-protected:
+
+   protected:
     std::shared_ptr<Value> value;
 };
 
 class ControlValue : public Value {
-public:
-    ControlValue(const std::string& _type)
-        : Value(_type) {}
+   public:
+    ControlValue(const std::string& _type) : Value(_type) {}
 };
 
 // Wraps an already-evaluated value as an AST node so compiled code can reuse
 // interpreter execution paths that expect argument nodes (builtins, methods).
-class PrecomputedNode: public Node {
-public:
-    explicit PrecomputedNode(std::shared_ptr<Value> _value)
-        : value(_value) {}
-    std::string get_node() override { return "PRECOMPUTED";}
-    std::string get_type() override { return NODE_PRECOMPUTED;}
-    std::shared_ptr<Value> get_value() { return value;}
-protected:
+class PrecomputedNode : public Node {
+   public:
+    explicit PrecomputedNode(std::shared_ptr<Value> _value) : value(_value) {}
+    std::string get_node() override { return "PRECOMPUTED"; }
+    std::string get_type() override { return NODE_PRECOMPUTED; }
+    std::shared_ptr<Value> get_value() { return value; }
+
+   protected:
     std::shared_ptr<Value> value;
 };
 
