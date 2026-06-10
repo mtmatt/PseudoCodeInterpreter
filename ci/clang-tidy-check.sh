@@ -16,9 +16,21 @@ else
     fi
 fi
 
+# src/compiler.cpp and src/pseudoc.cpp need LLVM headers; skip them when no
+# LLVM development install is available.
+llvm_config="$(command -v llvm-config || echo /opt/homebrew/opt/llvm/bin/llvm-config)"
+llvm_flags=()
+llvm_filter='cat'
+if "${llvm_config}" --includedir >/dev/null 2>&1; then
+    llvm_flags=("-I$(${llvm_config} --includedir)")
+else
+    llvm_filter="grep -Ev '^src/(compiler|pseudoc)\\.cpp$'"
+fi
+
 mapfile -t files < <(
     printf '%s\n' "${changed_files}" \
         | grep -E '^(src|test)/.*\.cpp$' \
+        | eval "${llvm_filter}" \
         || true
 )
 
@@ -31,4 +43,5 @@ clang-tidy --warnings-as-errors='*' "${files[@]}" -- \
     -std=c++17 \
     -Isrc \
     -Igoogletest/googletest/include \
+    "${llvm_flags[@]}" \
     -pthread

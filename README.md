@@ -1,6 +1,38 @@
 # PseudoCodeInterpreter
 
-Transform pseudo-code into an executable programming language.
+Transform pseudo-code into an executable programming language. Programs can be
+run with the interpreter (`pseudo`) or compiled to native executables with the
+LLVM-based compiler (`pseudoc`).
+
+## Compiling to Native Code
+
+Requires LLVM (e.g. `brew install llvm`). Build and use the compiler:
+
+```sh
+make            # interpreter (used as reference by the test suite)
+make compiler   # builds pseudoc and build/libpseudort.a
+./pseudoc program.ps -o program
+./program
+```
+
+Options:
+
+- `-o <output>`: output executable path (defaults to the source basename).
+- `--emit-llvm`: print the generated LLVM IR instead of producing a binary.
+- `--runtime-lib <path>`: explicit path to `libpseudort.a` (also settable via
+  `$PSEUDO_RT_LIB`; by default it is found next to the `pseudoc` binary).
+
+The compiler lowers the AST to LLVM IR (optimized at `-O2`), where each
+language operation calls into a runtime built from the interpreter's own value
+and symbol-table code, so compiled behavior matches the interpreter. Recursive
+pure-numeric algorithms get the same by-argument memoization the interpreter
+applies. Compiled output is verified against the interpreter by
+`make test-compiler` (differential tests in `test/compiler/`).
+
+Current limitations:
+
+- A loop used as a function's implicit return value evaluates to `NONE`
+  instead of the interpreter's collected per-iteration array.
 
 ## Data Types
 
