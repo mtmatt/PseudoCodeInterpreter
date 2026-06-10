@@ -75,8 +75,13 @@ Value* rt_member_assign(Value* obj, const char* name, Value* v);
 
 // `memoizable` enables the same by-argument result caching the interpreter
 // applies to recursive pure-numeric algorithms.
+Value* rt_make_algo(const char* name, Value* (*fn)(), const char* const* arg_names, int64_t nargs,
+                    int64_t memoizable);
 Value* rt_define_algo(const char* name, Value* (*fn)(), const char* const* arg_names, int64_t nargs,
                       int64_t memoizable);
+Value* rt_define_struct(const char* name, const char* const* member_names, int64_t nmembers,
+                        const char* const* method_names, Value** methods, int64_t nmethods);
+Value* rt_struct_add_method(const char* struct_name, const char* method_name, Value* method);
 Value* rt_call(Value* callee, Value** argv, int64_t argc);
 
 int64_t rt_frame_mark();

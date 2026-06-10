@@ -759,18 +759,17 @@ std::shared_ptr<Value> BoundMethodValue::execute(const NodeList& args, SymbolTab
         // Find method
         if (inst_obj->struct_def->methods.count(method_name)) {
             std::shared_ptr<Value> method = inst_obj->struct_def->methods[method_name];
-            // method is likely AlgoValue.
-            // We need to execute it with 'self' in scope.
-            // We can use the existing AlgoValue::execute, but we need to inject
-            // 'self'. Since AlgoValue::execute creates a new symbol table, we can't
-            // inject it easily from outside *before* it starts unless we modify it or
-            // subclass it. However, we can create a new AlgoValue or wrapper that
-            // injects 'self'.
-
-            // Actually, let's copy the logic of AlgoValue::execute here but add self.
             AlgoValue* algo_val = dynamic_cast<AlgoValue*>(method.get());
-            if (!algo_val)
-                return std::make_shared<ErrorValue>(VALUE_ERROR, "Method is not an algorithm");
+            if (!algo_val) {
+                if (method->get_type() != VALUE_ALGO) {
+                    return std::make_shared<ErrorValue>(VALUE_ERROR, "Method is not an algorithm");
+                }
+                // Compiled struct methods use their own execute path, with
+                // `self` provided by this parent binding scope.
+                SymbolTable sym(parent);
+                sym.set("self", obj);
+                return method->execute(args, &sym);
+            }
 
             SymbolTable sym(parent);
             ScopeCleaner cleaner(sym);

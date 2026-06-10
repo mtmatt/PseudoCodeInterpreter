@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -82,7 +83,40 @@ std::string numeric_args_key(const ValueList& values) {
     return key;
 }
 
-std::shared_ptr<Value> call_compiled(CompiledAlgoValue* algo, const ValueList& args) {
+std::shared_ptr<Value> make_compiled_algo(const char* name, Value* (*fn)(),
+                                          const char* const* arg_names, int64_t nargs,
+                                          int64_t memoizable) {
+    std::vector<std::string> names;
+    names.reserve(nargs);
+    for (int64_t i = 0; i < nargs; ++i) {
+        names.emplace_back(arg_names[i]);
+    }
+    return std::make_shared<CompiledAlgoValue>(name, fn, std::move(names), memoizable != 0);
+}
+
+void run_scope_destructors(SymbolTable& scope) {
+    if (!scope.has_instances()) {
+        return;
+    }
+    for (const auto& [name, val] : scope.get_symbols()) {
+        (void)name;
+        if (val->get_type() != VALUE_INSTANCE || val.use_count() != 1) {
+            continue;
+        }
+        InstanceValue* inst = dynamic_cast<InstanceValue*>(val.get());
+        std::shared_ptr<Value> self_ptr = val;
+        std::shared_ptr<Value> dtor = inst->get_member("destructor", self_ptr);
+        if (dtor->get_type() == VALUE_ALGO) {
+            std::shared_ptr<Value> ret = dtor->execute({}, scope.get_parent());
+            if (ret->get_type() == VALUE_ERROR) {
+                rt_fail(ret);
+            }
+        }
+    }
+}
+
+std::shared_ptr<Value> call_compiled(CompiledAlgoValue* algo, const ValueList& args,
+                                     SymbolTable* parent = nullptr) {
     if (args.size() < algo->arg_names.size()) {
         return std::make_shared<ErrorValue>(
             VALUE_ERROR, Color(0xFF, 0x39, 0x6E).get() + "Too few arguments" RESET);
@@ -105,14 +139,15 @@ std::shared_ptr<Value> call_compiled(CompiledAlgoValue* algo, const ValueList& a
 
     int64_t mark = rt_frame_mark();
     rt_frame_push();
-    scopes.push_back(std::make_unique<SymbolTable>(&current_scope()));
+    scopes.push_back(std::make_unique<SymbolTable>(parent != nullptr ? parent : &current_scope()));
     for (size_t i = 0; i < args.size(); ++i) {
         scopes.back()->set(algo->arg_names[i], args[i]);
     }
     Value* result = algo->fn();
     std::shared_ptr<Value> kept = ref(result);
-    scopes.pop_back();
     rt_frame_release(mark);
+    run_scope_destructors(*scopes.back());
+    scopes.pop_back();
     if (!memo_key.empty() && (kept->get_type() == VALUE_INT || kept->get_type() == VALUE_FLOAT)) {
         algo->memo[memo_key] = kept;
     }
@@ -131,7 +166,7 @@ std::shared_ptr<Value> CompiledAlgoValue::execute(const NodeList& args, SymbolTa
         }
         evaluated.push_back(v);
     }
-    return call_compiled(this, evaluated);
+    return call_compiled(this, evaluated, &sym);
 }
 
 }  // namespace
@@ -296,17 +331,42 @@ Value* rt_member_assign(Value* obj, const char* name, Value* v) {
         VALUE_ERROR, "Assignment to member only supported for Struct Instances\n"));
 }
 
+Value* rt_make_algo(const char* name, Value* (*fn)(), const char* const* arg_names, int64_t nargs,
+                    int64_t memoizable) {
+    return track(make_compiled_algo(name, fn, arg_names, nargs, memoizable));
+}
+
 Value* rt_define_algo(const char* name, Value* (*fn)(), const char* const* arg_names, int64_t nargs,
                       int64_t memoizable) {
-    std::vector<std::string> names;
-    names.reserve(nargs);
-    for (int64_t i = 0; i < nargs; ++i) {
-        names.emplace_back(arg_names[i]);
-    }
-    std::shared_ptr<Value> algo =
-        std::make_shared<CompiledAlgoValue>(name, fn, std::move(names), memoizable != 0);
+    std::shared_ptr<Value> algo = make_compiled_algo(name, fn, arg_names, nargs, memoizable);
     current_scope().set(name, algo);
     return track(algo);
+}
+
+Value* rt_define_struct(const char* name, const char* const* member_names, int64_t nmembers,
+                        const char* const* method_names, Value** methods, int64_t nmethods) {
+    std::vector<std::string> members;
+    members.reserve(nmembers);
+    for (int64_t i = 0; i < nmembers; ++i) {
+        members.emplace_back(member_names[i]);
+    }
+
+    std::map<std::string, std::shared_ptr<Value>> method_map;
+    for (int64_t i = 0; i < nmethods; ++i) {
+        method_map[method_names[i]] = ref(methods[i]);
+    }
+
+    std::shared_ptr<Value> struct_value = std::make_shared<StructValue>(name, members, method_map);
+    current_scope().set(name, struct_value);
+    return track(struct_value);
+}
+
+Value* rt_struct_add_method(const char* struct_name, const char* method_name, Value* method) {
+    std::shared_ptr<Value> struct_value = current_scope().get(struct_name);
+    if (struct_value->get_type() == VALUE_STRUCT) {
+        dynamic_cast<StructValue*>(struct_value.get())->methods[method_name] = ref(method);
+    }
+    return track(ref(method));
 }
 
 Value* rt_call(Value* callee, Value** argv, int64_t argc) {

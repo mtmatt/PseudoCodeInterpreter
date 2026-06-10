@@ -24,6 +24,7 @@ FILES=(
     "$ROOT/test/test_repeat.ps"
     "$ROOT/test/test_array_methods.ps"
     "$ROOT/test/test_string_index.ps"
+    "$ROOT/test/test_struct.ps"
 )
 
 failures=0
@@ -49,18 +50,6 @@ for src in "${FILES[@]}"; do
         echo "PASS $name"
     fi
 done
-
-# Struct programs must be rejected at compile time with a clear message.
-if "$PSEUDOC" "$ROOT/test/test_struct.ps" -o "$WORKDIR/struct.bin" > "$WORKDIR/struct.out" 2>&1; then
-    echo "FAIL struct-rejection: expected compile error"
-    failures=$((failures + 1))
-elif ! grep -q "Struct is not supported" "$WORKDIR/struct.out"; then
-    echo "FAIL struct-rejection: wrong error message"
-    sed 's/^/    /' "$WORKDIR/struct.out"
-    failures=$((failures + 1))
-else
-    echo "PASS struct-rejection"
-fi
 
 if [[ $failures -ne 0 ]]; then
     echo "$failures test(s) failed"
