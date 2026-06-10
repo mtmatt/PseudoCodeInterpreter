@@ -111,6 +111,37 @@ class CodeGen {
         return tmp.CreateAlloca(type);
     }
 
+    llvm::Value* string_array(const std::vector<std::string>& strings,
+                              const std::string& global_name) {
+        if (strings.empty()) {
+            return llvm::ConstantPointerNull::get(ptr_ty);
+        }
+
+        llvm::ArrayType* strings_ty = llvm::ArrayType::get(ptr_ty, strings.size());
+        std::vector<llvm::Constant*> string_ptrs;
+        string_ptrs.reserve(strings.size());
+        for (const auto& value : strings) {
+            string_ptrs.push_back(llvm::cast<llvm::Constant>(cstring(value)));
+        }
+        return new llvm::GlobalVariable(module, strings_ty, true, llvm::GlobalValue::PrivateLinkage,
+                                        llvm::ConstantArray::get(strings_ty, string_ptrs),
+                                        global_name);
+    }
+
+    llvm::Value* value_array(const std::vector<llvm::Value*>& values) {
+        if (values.empty()) {
+            return llvm::ConstantPointerNull::get(ptr_ty);
+        }
+
+        llvm::ArrayType* values_ty = llvm::ArrayType::get(ptr_ty, values.size());
+        llvm::AllocaInst* slots = entry_alloca(values_ty);
+        for (size_t i = 0; i < values.size(); ++i) {
+            builder.CreateStore(values[i],
+                                builder.CreateConstInBoundsGEP2_64(values_ty, slots, 0, i));
+        }
+        return slots;
+    }
+
     void error(const std::string& message, const std::shared_ptr<Node>& node) {
         std::string suffix;
         std::shared_ptr<Token> tok = node ? node->get_tok() : nullptr;
@@ -159,10 +190,7 @@ class CodeGen {
         if (type == NODE_RETURN) return gen_return(node);
         if (type == NODE_BREAK) return gen_loop_jump(node, true);
         if (type == NODE_CONTINUE) return gen_loop_jump(node, false);
-        if (type == NODE_STRUCTDEF) {
-            error("compile error: Struct is not supported by the compiler yet", node);
-            return nullptr;
-        }
+        if (type == NODE_STRUCTDEF) return gen_struct_def(node);
         error("compile error: unsupported statement " + type, node);
         return nullptr;
     }
@@ -524,19 +552,8 @@ class CodeGen {
 
     /// ---- functions and calls ----
 
-    llvm::Value* gen_algo_def(const std::shared_ptr<Node>& node) {
-        std::string name = node->get_name();
-        if (name.find("::") != std::string::npos) {
-            error("compile error: Struct is not supported by the compiler yet", node);
-            return nullptr;
-        }
-
+    llvm::Function* emit_algo_function(const std::shared_ptr<Node>& node, const std::string& name) {
         AlgorithmDefNode* def = dynamic_cast<AlgorithmDefNode*>(node.get());
-        std::vector<std::string> arg_names;
-        for (const auto& tok : node->get_toks()) {
-            arg_names.push_back(tok->get_value());
-        }
-
         llvm::Function* fn = llvm::Function::Create(
             llvm::FunctionType::get(ptr_ty, false), llvm::Function::PrivateLinkage,
             "ps.algo." + std::to_string(algo_counter++) + "." + name, module);
@@ -557,22 +574,46 @@ class CodeGen {
         if (!errors.empty()) {
             return nullptr;
         }
+        return fn;
+    }
 
-        // Registration happens at the definition site, like visit_algo_def.
-        llvm::ArrayType* names_ty = llvm::ArrayType::get(ptr_ty, arg_names.size());
-        std::vector<llvm::Constant*> name_ptrs;
-        for (const auto& arg : arg_names) {
-            name_ptrs.push_back(llvm::cast<llvm::Constant>(cstring(arg)));
+    llvm::Value* gen_algo_value(const std::shared_ptr<Node>& node, const std::string& name,
+                                bool define_global) {
+        std::vector<std::string> arg_names;
+        for (const auto& tok : node->get_toks()) {
+            arg_names.push_back(tok->get_value());
         }
-        auto* names_global =
-            new llvm::GlobalVariable(module, names_ty, true, llvm::GlobalValue::PrivateLinkage,
-                                     llvm::ConstantArray::get(names_ty, name_ptrs), "args");
+
+        llvm::Function* fn = emit_algo_function(node, name);
+        if (fn == nullptr) {
+            return nullptr;
+        }
+
         bool memoizable = is_memoizable_numeric_algo(node, name, arg_names);
-        return builder.CreateCall(
-            get_rt("rt_define_algo", ptr_ty, {ptr_ty, ptr_ty, ptr_ty, i64_ty, i64_ty}),
-            {cstring(name), fn, names_global,
-             builder.getInt64(static_cast<int64_t>(arg_names.size())),
-             builder.getInt64(memoizable ? 1 : 0)});
+        std::string rt_name = define_global ? "rt_define_algo" : "rt_make_algo";
+        return builder.CreateCall(get_rt(rt_name, ptr_ty, {ptr_ty, ptr_ty, ptr_ty, i64_ty, i64_ty}),
+                                  {cstring(name), fn, string_array(arg_names, "args"),
+                                   builder.getInt64(static_cast<int64_t>(arg_names.size())),
+                                   builder.getInt64(memoizable ? 1 : 0)});
+    }
+
+    llvm::Value* gen_algo_def(const std::shared_ptr<Node>& node) {
+        std::string name = node->get_name();
+        size_t scope = name.find("::");
+        if (scope == std::string::npos) {
+            // Registration happens at the definition site, like visit_algo_def.
+            return gen_algo_value(node, name, true);
+        }
+
+        std::string struct_name = name.substr(0, scope);
+        std::string method_name = name.substr(scope + 2);
+        llvm::Value* method = gen_algo_value(node, name, true);
+        if (method == nullptr) {
+            return nullptr;
+        }
+        builder.CreateCall(get_rt("rt_struct_add_method", ptr_ty, {ptr_ty, ptr_ty, ptr_ty}),
+                           {cstring(struct_name), cstring(method_name), method});
+        return method;
     }
 
     llvm::Value* gen_algo_call(const std::shared_ptr<Node>& node) {
@@ -605,6 +646,32 @@ class CodeGen {
         return builder.CreateCall(
             get_rt("rt_call", ptr_ty, {ptr_ty, ptr_ty, i64_ty}),
             {callee, argv, builder.getInt64(static_cast<int64_t>(args.size()))});
+    }
+
+    llvm::Value* gen_struct_def(const std::shared_ptr<Node>& node) {
+        std::vector<std::string> member_names;
+        for (const auto& tok : node->get_toks()) {
+            member_names.push_back(tok->get_value());
+        }
+
+        std::vector<std::string> method_names;
+        std::vector<llvm::Value*> methods;
+        for (const auto& method_node : node->get_child()) {
+            std::string method_name = method_node->get_name();
+            llvm::Value* method = gen_algo_value(method_node, method_name, false);
+            if (method == nullptr) {
+                return nullptr;
+            }
+            method_names.push_back(method_name);
+            methods.push_back(method);
+        }
+
+        return builder.CreateCall(
+            get_rt("rt_define_struct", ptr_ty, {ptr_ty, ptr_ty, i64_ty, ptr_ty, ptr_ty, i64_ty}),
+            {cstring(node->get_name()), string_array(member_names, "members"),
+             builder.getInt64(static_cast<int64_t>(member_names.size())),
+             string_array(method_names, "method.names"), value_array(methods),
+             builder.getInt64(static_cast<int64_t>(methods.size()))});
     }
 
     /// ---- arrays, hash tables, members ----

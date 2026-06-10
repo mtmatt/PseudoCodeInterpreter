@@ -86,6 +86,12 @@ its `shared_ptr` in the current frame. Frames are pushed/popped:
   `rt_index_assign` mirroring `visit_member_access`, `visit_array_access`,
   `visit_array_assign` (string 1-indexing, hash get/set, array element
   assignment).
+- Struct definitions: in-struct methods compile to private algorithm functions
+  and runtime `CompiledAlgoValue`s, then `rt_define_struct` registers a
+  `StructValue` with member and method maps. Later `Algorithm Struct::method`
+  definitions compile as global algorithms and call `rt_struct_add_method` at
+  the definition site, matching the interpreter's attachment timing. Bound
+  instance method calls execute with a parent scope containing `self`.
 - Array literals: `rt_array_new` + `rt_array_push`.
 - Errors: any `rt_*` function that produces or receives a `VALUE_ERROR` prints
   `err->get_num()` (same text the interpreter prints at top level) and exits
@@ -103,14 +109,6 @@ its `shared_ptr` in the current frame. Frames are pushed/popped:
 - Compiled recursive pure-numeric algorithms get the interpreter's
   by-argument memoization via `rt_define_algo(..., memoizable)`, using the
   shared `is_memoizable_numeric_algo` analysis (src/analysis.h).
-
-### Unsupported in v1 (clean compile-time error)
-
-- `Struct` definitions / instances (`NODE_STRUCTDEF`, member assignment on
-  instances). The compiler reports "compile error: Struct is not supported by
-  the compiler yet" with the source location. `import` works (textual
-  expansion before parsing), but importing a file that defines structs (e.g.
-  `dsa`) hits the same error.
 
 ### Intrusive changes to existing code (kept minimal)
 
@@ -157,7 +155,7 @@ with `pseudoc` and asserts its stdout equals `./pseudo file.ps` stdout.
 Coverage: arithmetic/comparison/logic on ints/floats/strings, arrays +
 methods, hash tables, string indexing, if/for/while/repeat with
 break/continue, recursion (fib), nested functions, argument-count errors,
-runtime errors (index out of range), and the struct compile-error path.
+runtime errors (index out of range), and struct construction/method calls.
 Existing `make test` (gtest) must keep passing.
 
 ## Performance expectation

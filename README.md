@@ -31,8 +31,6 @@ applies. Compiled output is verified against the interpreter by
 
 Current limitations:
 
-- `Struct` definitions are not supported yet (clear compile-time error);
-  `import` of struct-based modules such as `dsa` therefore also fails.
 - A loop used as a function's implicit return value evaluates to `NONE`
   instead of the interpreter's collected per-iteration array.
 
