@@ -47,13 +47,34 @@ run : $(TARGET)
 	./shell
 
 # Runtime library for compiled programs (interpreter core + rt_* shims)
+# Prefer the system ar: GNU binutils ar produces archives Apple's ld rejects.
+AR := $(shell test -x /usr/bin/ar && echo /usr/bin/ar || echo ar)
 RT_LIB = $(BUILD_DIR)/libpseudort.a
 RT_OBJS = $(filter-out $(BUILD_DIR)/shell.o,$(OBJS)) $(BUILD_DIR)/runtime.o
 
 $(RT_LIB): $(RT_OBJS)
-	ar rcs $@ $(RT_OBJS)
+	$(AR) rcs $@ $(RT_OBJS)
 
 runtime: $(BUILD_DIR) $(RT_LIB)
+
+# LLVM AOT compiler (optional; requires LLVM, e.g. `brew install llvm`)
+LLVM_CONFIG ?= $(shell command -v llvm-config 2>/dev/null || echo /opt/homebrew/opt/llvm/bin/llvm-config)
+LLVM_INCLUDEDIR = $(shell $(LLVM_CONFIG) --includedir)
+LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
+LLVM_COMPILE_FLAGS = -I$(LLVM_INCLUDEDIR) -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS
+PSEUDOC_TARGET = pseudoc
+PSEUDOC_OBJS = $(filter-out $(BUILD_DIR)/shell.o,$(OBJS)) $(BUILD_DIR)/compiler.o $(BUILD_DIR)/pseudoc.o
+
+$(BUILD_DIR)/compiler.o: src/compiler.cpp $(HEADERS) | $(BUILD_DIR)
+	$(CC) -c $(CPPFLAGS) $(LLVM_COMPILE_FLAGS) src/compiler.cpp -o $@
+
+$(BUILD_DIR)/pseudoc.o: src/pseudoc.cpp $(HEADERS) | $(BUILD_DIR)
+	$(CC) -c $(CPPFLAGS) $(LLVM_COMPILE_FLAGS) src/pseudoc.cpp -o $@
+
+$(PSEUDOC_TARGET): $(BUILD_DIR) $(PSEUDOC_OBJS) $(RT_LIB)
+	$(CC) $(CPPFLAGS) $(PSEUDOC_OBJS) -L$(LLVM_LIBDIR) -lLLVM -Wl,-rpath,$(LLVM_LIBDIR) -o $(PSEUDOC_TARGET)
+
+compiler: $(PSEUDOC_TARGET) runtime
 
 # Google Test rules
 
