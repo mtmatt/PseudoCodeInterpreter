@@ -1,0 +1,41 @@
+Algorithm add(a, b):
+    return a + b
+
+print(add(2, 3))
+print(add("foo", "bar"))
+
+Algorithm fact(n):
+    if n <= 1 then return 1
+    return n * fact(n - 1)
+
+print(fact(10))
+
+Algorithm last_statement(x):
+    x * 2
+
+print(last_statement(21))
+
+Algorithm outer_scope():
+    return hidden + 1
+
+hidden <- 41
+print(outer_scope())
+
+Algorithm apply_twice(f, x):
+    return f(f(x))
+
+Algorithm inc(v):
+    return v + 1
+
+print(apply_twice(inc, 10))
+
+Algorithm early(n):
+    for i <- 1 to 100 do
+        if i = n then
+            return i * 1000
+    return 0
+
+print(early(7))
+
+add(1)
+print("after call error")
