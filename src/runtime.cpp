@@ -260,8 +260,8 @@ Value *rt_member_assign(Value *obj, const char *name, Value *v) {
         VALUE_ERROR, "Assignment to member only supported for Struct Instances\n"));
 }
 
-void rt_define_algo(const char *name, Value *(*fn)(),
-                    const char *const *arg_names, int64_t nargs) {
+Value *rt_define_algo(const char *name, Value *(*fn)(),
+                      const char *const *arg_names, int64_t nargs) {
     std::vector<std::string> names;
     names.reserve(nargs);
     for (int64_t i = 0; i < nargs; ++i) {
@@ -270,7 +270,7 @@ void rt_define_algo(const char *name, Value *(*fn)(),
     std::shared_ptr<Value> algo =
         std::make_shared<CompiledAlgoValue>(name, fn, std::move(names));
     current_scope().set(name, algo);
-    track(algo);
+    return track(algo);
 }
 
 Value *rt_call(Value *callee, Value **argv, int64_t argc) {
@@ -302,6 +302,12 @@ void rt_frame_release(int64_t mark) {
     while (static_cast<int64_t>(frames.size()) > mark) {
         frames.pop_back();
     }
+}
+
+void rt_loop_keep(int64_t frame_index, Value *v) {
+    std::shared_ptr<Value> kept = ref(v);
+    frames[frame_index].clear();
+    frames[frame_index].push_back(kept);
 }
 
 } // extern "C"

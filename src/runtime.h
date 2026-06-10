@@ -73,13 +73,16 @@ Value *rt_index_assign(Value *obj, Value *idx, Value *v);
 Value *rt_member_access(Value *obj, const char *name);
 Value *rt_member_assign(Value *obj, const char *name, Value *v);
 
-void rt_define_algo(const char *name, Value *(*fn)(),
-                    const char *const *arg_names, int64_t nargs);
+Value *rt_define_algo(const char *name, Value *(*fn)(),
+                      const char *const *arg_names, int64_t nargs);
 Value *rt_call(Value *callee, Value **argv, int64_t argc);
 
 int64_t rt_frame_mark();
 void rt_frame_push();
 void rt_frame_release(int64_t mark);
+// Replaces the contents of frame `frame_index` with just `v`: keeps the
+// current loop variable alive for one iteration without per-iteration growth.
+void rt_loop_keep(int64_t frame_index, Value *v);
 }
 
 #endif
