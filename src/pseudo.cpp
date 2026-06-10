@@ -2,16 +2,23 @@
 
 #include <cctype>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
+#include <system_error>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "analysis.h"
@@ -19,7 +26,11 @@
 #include "error.h"
 #include "imports.h"
 #include "interpreter.h"
+#include "jit.h"
+#include "lexer.h"
 #include "node.h"
+#include "parser.h"
+#include "token.h"
 #include "value.h"
 
 /// --------------------
@@ -309,9 +320,9 @@ bool is_pure_numeric_node(const std::shared_ptr<Node>& node, const std::string& 
                           const std::unordered_set<std::string>& arg_names) {
     if (!node) return false;
 
-    const std::string type = node->get_type();
+    std::string type = node->get_type();
     if (type == NODE_VALUE) {
-        const std::string token_type = node->get_tok()->get_type();
+        std::string token_type = node->get_tok()->get_type();
         return token_type == TOKEN_INT || token_type == TOKEN_FLOAT;
     }
     if (type == NODE_VARACCESS) {
@@ -448,7 +459,7 @@ std::shared_ptr<Value> AlgoValue::execute(const NodeList& args, SymbolTable* par
     SymbolTable sym(parent);
     ScopeCleaner cleaner(sym);
     Interpreter interpreter(sym);
-    const std::size_t node_id = value->get_id();
+    std::size_t node_id = value->get_id();
     auto memoizable_found = memoizable_by_node.find(node_id);
     if (memoizable_found == memoizable_by_node.end()) {
         memoizable_found =
@@ -474,7 +485,7 @@ std::shared_ptr<Value> AlgoValue::execute(const NodeList& args, SymbolTable* par
             evaluated_args.push_back(arg);
         }
 
-        const std::string cache_key = numeric_cache_key(evaluated_args);
+        std::string cache_key = numeric_cache_key(evaluated_args);
         if (!cache_key.empty()) {
             auto& cache = memoized_results[node_id];
             auto cached = cache.find(cache_key);
@@ -1119,7 +1130,7 @@ std::string trim(const std::string& str) {
 
 bool parse_import_line(const std::string& line, std::string& target) {
     std::string trimmed = trim(line);
-    const std::string keyword = "import";
+    std::string keyword = "import";
     if (trimmed.rfind(keyword, 0) != 0) {
         return false;
     }
