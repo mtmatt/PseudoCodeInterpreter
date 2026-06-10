@@ -66,7 +66,10 @@ test: $(TEST_TARGET)
 coverage: test
 	gcov -r -o $(BUILD_COV_DIR) $(filter-out src/shell.cpp, $(SRCS))
 
-.PHONY: clean all test coverage lsp
+test-compiler: $(TARGET)
+	bash test/compiler_tests.sh
+
+.PHONY: clean all test coverage lsp test-compiler
 lsp: $(LSP_TARGET)
 
 clean:
