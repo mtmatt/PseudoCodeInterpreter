@@ -28,6 +28,7 @@ std::vector<std::vector<std::shared_ptr<Value>>> frames;
 // Scope stack: scopes.back() is the current symbol table; entry 0 holds the
 // globals. Parents follow the caller chain, like the interpreter.
 std::vector<std::unique_ptr<SymbolTable>> scopes;
+std::vector<std::unordered_map<int64_t, int64_t>> i64_memo_tables;
 
 [[noreturn]] void rt_fail(const std::shared_ptr<Value>& err) {
     std::cout << err->get_num() << "\n";
@@ -193,6 +194,77 @@ Value* rt_make_none() { return track(std::make_shared<Value>()); }
 Value* rt_array_new() { return track(std::make_shared<ArrayValue>(ValueList(0))); }
 
 void rt_array_push(Value* arr, Value* v) { dynamic_cast<ArrayValue*>(arr)->push_back(ref(v)); }
+
+Value* rt_array_get_i64(Value* arr, int64_t index) {
+    ArrayValue* array = dynamic_cast<ArrayValue*>(arr);
+    if (array == nullptr) {
+        rt_fail(std::make_shared<ErrorValue>(VALUE_ERROR, "Indexing a non-array value"));
+    }
+    return track(array->operator[](static_cast<int>(index)));
+}
+
+Value* rt_array_set_i64(Value* arr, int64_t index, int64_t value) {
+    ArrayValue* array = dynamic_cast<ArrayValue*>(arr);
+    if (array == nullptr) {
+        rt_fail(std::make_shared<ErrorValue>(VALUE_ERROR, "Indexing a non-array value"));
+    }
+    std::shared_ptr<Value> boxed = std::make_shared<TypedValue<int64_t>>(VALUE_INT, value);
+    array->operator[](static_cast<int>(index)) = boxed;
+    if (boxed->get_type() == VALUE_ERROR) {
+        rt_fail(boxed);
+    }
+    return track(boxed);
+}
+
+Value* rt_array_push_i64(Value* arr, int64_t value) {
+    ArrayValue* array = dynamic_cast<ArrayValue*>(arr);
+    if (array == nullptr) {
+        rt_fail(std::make_shared<ErrorValue>(VALUE_ERROR, "Calling push on a non-array value"));
+    }
+    std::shared_ptr<Value> boxed = std::make_shared<TypedValue<int64_t>>(VALUE_INT, value);
+    array->push_back(boxed);
+    return track(boxed);
+}
+
+int64_t rt_array_pop_i64(Value* arr) {
+    ArrayValue* array = dynamic_cast<ArrayValue*>(arr);
+    if (array == nullptr) {
+        rt_fail(std::make_shared<ErrorValue>(VALUE_ERROR, "Calling pop on a non-array value"));
+    }
+    std::shared_ptr<Value> value = array->pop_back();
+    if (value->get_type() == VALUE_ERROR) {
+        rt_fail(value);
+    }
+    return value->as_int();
+}
+
+int64_t rt_i64_memo_lookup(int64_t memo_id, int64_t arg, int64_t* out) {
+    if (memo_id < 0) {
+        return 0;
+    }
+    size_t index = static_cast<size_t>(memo_id);
+    if (i64_memo_tables.size() <= index) {
+        i64_memo_tables.resize(index + 1);
+        return 0;
+    }
+    auto found = i64_memo_tables[index].find(arg);
+    if (found == i64_memo_tables[index].end()) {
+        return 0;
+    }
+    *out = found->second;
+    return 1;
+}
+
+void rt_i64_memo_store(int64_t memo_id, int64_t arg, int64_t value) {
+    if (memo_id < 0) {
+        return;
+    }
+    size_t index = static_cast<size_t>(memo_id);
+    if (i64_memo_tables.size() <= index) {
+        i64_memo_tables.resize(index + 1);
+    }
+    i64_memo_tables[index][arg] = value;
+}
 
 Value* rt_get_var(const char* name) { return track(current_scope().get(name)); }
 
