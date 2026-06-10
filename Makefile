@@ -46,6 +46,15 @@ $(BUILD_COV_DIR)/%.o: src/%.cpp $(HEADERS) | $(BUILD_COV_DIR)
 run : $(TARGET)
 	./shell
 
+# Runtime library for compiled programs (interpreter core + rt_* shims)
+RT_LIB = $(BUILD_DIR)/libpseudort.a
+RT_OBJS = $(filter-out $(BUILD_DIR)/shell.o,$(OBJS)) $(BUILD_DIR)/runtime.o
+
+$(RT_LIB): $(RT_OBJS)
+	ar rcs $@ $(RT_OBJS)
+
+runtime: $(BUILD_DIR) $(RT_LIB)
+
 # Google Test rules
 
 GTEST_HEADERS = $(GTEST_DIR)/include/gtest/*.h \
@@ -69,7 +78,7 @@ coverage: test
 test-compiler: $(TARGET)
 	bash test/compiler_tests.sh
 
-.PHONY: clean all test coverage lsp test-compiler
+.PHONY: clean all test coverage lsp test-compiler runtime compiler
 lsp: $(LSP_TARGET)
 
 clean:
