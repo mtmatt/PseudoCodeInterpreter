@@ -91,6 +91,19 @@ its `shared_ptr` in the current frame. Frames are pushed/popped:
   `err->get_num()` (same text the interpreter prints at top level) and exits
   with status 1. There is no error-value plumbing in generated IR.
 
+### Documented v1 divergences from the interpreter
+
+- A loop used as a function's implicit return value evaluates to `NONE`;
+  the interpreter (with `collect_loop_results`) returns an array of
+  per-iteration values. Rarely used; revisit if needed.
+- `break`/`continue` outside any loop are compile-time errors (the
+  interpreter propagates them as control values, which can even break an
+  outer loop across a function call — pathological behavior we do not
+  reproduce).
+- Compiled recursive pure-numeric algorithms get the interpreter's
+  by-argument memoization via `rt_define_algo(..., memoizable)`, using the
+  shared `is_memoizable_numeric_algo` analysis (src/analysis.h).
+
 ### Unsupported in v1 (clean compile-time error)
 
 - `Struct` definitions / instances (`NODE_STRUCTDEF`, member assignment on

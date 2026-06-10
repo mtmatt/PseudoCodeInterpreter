@@ -16,8 +16,7 @@ struct ImportState {
 // Recursively replaces `import` lines in `text` with the imported file
 // contents. Returns false and fills `error` on unresolved, unreadable, or
 // circular imports.
-bool expand_imports(const std::string &file_name, const std::string &text,
-                    ImportState &state, std::string &expanded,
-                    std::string &error);
+bool expand_imports(const std::string& file_name, const std::string& text, ImportState& state,
+                    std::string& expanded, std::string& error);
 
 #endif

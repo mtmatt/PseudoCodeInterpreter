@@ -1,4 +1,5 @@
 #include "pseudo.h"
+#include "analysis.h"
 #include "imports.h"
 #include "color.h"
 #include "interpreter.h"
@@ -401,6 +402,8 @@ bool has_self_call(const std::shared_ptr<Node>& node, const std::string& algo_na
   return false;
 }
 
+} // namespace
+
 bool is_memoizable_numeric_algo(const std::shared_ptr<Node>& node,
                                 const std::string& algo_name,
                                 const std::vector<std::string>& args) {
@@ -417,6 +420,8 @@ bool is_memoizable_numeric_algo(const std::shared_ptr<Node>& node,
   }
   return recursive;
 }
+
+namespace {
 
 std::shared_ptr<Node> single_return_numeric_expr(const std::shared_ptr<Node>& node,
                                                  const std::string& algo_name,

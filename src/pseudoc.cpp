@@ -5,14 +5,6 @@
 /// Compiles a .ps source file to a native executable:
 ///   pseudoc <file.ps> [-o <out>] [--emit-llvm] [--runtime-lib <path>]
 
-#include "compiler.h"
-#include "error.h"
-#include "imports.h"
-#include "lexer.h"
-#include "node.h"
-#include "parser.h"
-#include "token.h"
-
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/Module.h>
@@ -25,15 +17,23 @@
 #include <llvm/Target/TargetMachine.h>
 #include <llvm/TargetParser/Host.h>
 #include <llvm/TargetParser/Triple.h>
+#include <unistd.h>
 
 #include <cstdlib>
 #include <filesystem>
-#include <unistd.h>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include "compiler.h"
+#include "error.h"
+#include "imports.h"
+#include "lexer.h"
+#include "node.h"
+#include "parser.h"
+#include "token.h"
 
 namespace {
 
@@ -44,12 +44,12 @@ void usage() {
                  "[--runtime-lib <path>]\n";
 }
 
-std::string find_runtime_lib(const std::string &flag_value, const char *argv0) {
+std::string find_runtime_lib(const std::string& flag_value, const char* argv0) {
     std::vector<fs::path> candidates;
     if (!flag_value.empty()) {
         candidates.emplace_back(flag_value);
     }
-    if (const char *env = std::getenv("PSEUDO_RT_LIB")) {
+    if (const char* env = std::getenv("PSEUDO_RT_LIB")) {
         candidates.emplace_back(env);
     }
     std::error_code ec;
@@ -59,7 +59,7 @@ std::string find_runtime_lib(const std::string &flag_value, const char *argv0) {
     }
     candidates.push_back(fs::current_path() / "build" / "libpseudort.a");
 
-    for (const auto &candidate : candidates) {
+    for (const auto& candidate : candidates) {
         if (fs::exists(candidate, ec) && fs::is_regular_file(candidate, ec)) {
             return candidate.string();
         }
@@ -67,7 +67,7 @@ std::string find_runtime_lib(const std::string &flag_value, const char *argv0) {
     return "";
 }
 
-std::string shell_quote(const std::string &text) {
+std::string shell_quote(const std::string& text) {
     std::string quoted = "'";
     for (char c : text) {
         if (c == '\'') {
@@ -80,9 +80,9 @@ std::string shell_quote(const std::string &text) {
     return quoted;
 }
 
-} // namespace
+}  // namespace
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     std::string input_path, output_path, runtime_lib_flag;
     bool emit_llvm = false;
     for (int i = 1; i < argc; ++i) {
@@ -130,36 +130,32 @@ int main(int argc, char **argv) {
 
     ImportState import_state;
     std::string expanded_text, import_error;
-    if (!expand_imports(input_path, code, import_state, expanded_text,
-                        import_error)) {
+    if (!expand_imports(input_path, code, import_state, expanded_text, import_error)) {
         std::cout << import_error << "\n";
         return 1;
     }
 
     Lexer lexer(input_path, expanded_text);
     TokenList tokens = lexer.make_tokens();
-    for (const auto &tok : tokens) {
+    for (const auto& tok : tokens) {
         if (tok->get_type() == TOKEN_ERROR) {
-            std::cout << "Error: " << tok->get_value() << ", line "
-                      << tok->get_pos().line + 1
+            std::cout << "Error: " << tok->get_value() << ", line " << tok->get_pos().line + 1
                       << ", column: " << tok->get_pos().column << "\n";
-            std::cout << error_marker(expanded_text, tok->get_pos(),
-                                      tok->get_pos());
+            std::cout << error_marker(expanded_text, tok->get_pos(), tok->get_pos());
             return 1;
         }
     }
 
     Parser parser(tokens);
     NodeList ast = parser.parse();
-    for (const auto &node : ast) {
+    for (const auto& node : ast) {
         if (node->get_type() == NODE_ERROR) {
             std::shared_ptr<Token> err_tok = node->get_tok();
             if (err_tok) {
                 std::cout << "Error: " << err_tok->get_value() << ", line "
                           << err_tok->get_pos().line + 1
                           << ", column: " << err_tok->get_pos().column << "\n";
-                std::cout << error_marker(expanded_text, err_tok->get_pos(),
-                                          err_tok->get_pos());
+                std::cout << error_marker(expanded_text, err_tok->get_pos(), err_tok->get_pos());
             } else {
                 std::cout << "Error: " << node->get_node() << "\n";
             }
@@ -171,7 +167,7 @@ int main(int argc, char **argv) {
     llvm::Module module(input_path, context);
     std::vector<std::string> compile_errors;
     if (!Compiler::compile(ast, module, compile_errors)) {
-        for (const auto &message : compile_errors) {
+        for (const auto& message : compile_errors) {
             std::cout << message << "\n";
         }
         return 1;
@@ -193,16 +189,14 @@ int main(int argc, char **argv) {
 
     std::string triple_name = llvm::sys::getDefaultTargetTriple();
     std::string lookup_error;
-    const llvm::Target *target =
-        llvm::TargetRegistry::lookupTarget(triple_name, lookup_error);
+    const llvm::Target* target = llvm::TargetRegistry::lookupTarget(triple_name, lookup_error);
     if (target == nullptr) {
         std::cout << "target lookup failed: " << lookup_error << "\n";
         return 1;
     }
     llvm::TargetOptions target_options;
-    llvm::TargetMachine *machine = target->createTargetMachine(
-        llvm::Triple(triple_name), "generic", "", target_options,
-        llvm::Reloc::PIC_);
+    llvm::TargetMachine* machine = target->createTargetMachine(
+        llvm::Triple(triple_name), "generic", "", target_options, llvm::Reloc::PIC_);
     module.setDataLayout(machine->createDataLayout());
     module.setTargetTriple(llvm::Triple(triple_name));
 
@@ -222,15 +216,12 @@ int main(int argc, char **argv) {
     mpm.run(module, mam);
 
     fs::path object_path =
-        fs::temp_directory_path() /
-        ("pseudoc-" + std::to_string(::getpid()) + ".o");
+        fs::temp_directory_path() / ("pseudoc-" + std::to_string(::getpid()) + ".o");
     {
         std::error_code ec;
-        llvm::raw_fd_ostream object_stream(object_path.string(), ec,
-                                           llvm::sys::fs::OF_None);
+        llvm::raw_fd_ostream object_stream(object_path.string(), ec, llvm::sys::fs::OF_None);
         if (ec) {
-            std::cout << "cannot write " << object_path.string() << ": "
-                      << ec.message() << "\n";
+            std::cout << "cannot write " << object_path.string() << ": " << ec.message() << "\n";
             return 1;
         }
         llvm::legacy::PassManager emit_pm;
@@ -251,12 +242,11 @@ int main(int argc, char **argv) {
     }
 
     std::string linker = "c++";
-    if (const char *env = std::getenv("PSEUDO_LD")) {
+    if (const char* env = std::getenv("PSEUDO_LD")) {
         linker = env;
     }
-    std::string command = linker + " " + shell_quote(object_path.string()) +
-                          " " + shell_quote(runtime_lib) + " -o " +
-                          shell_quote(output_path);
+    std::string command = linker + " " + shell_quote(object_path.string()) + " " +
+                          shell_quote(runtime_lib) + " -o " + shell_quote(output_path);
     int status = std::system(command.c_str());
     fs::remove(object_path);
     if (status != 0) {
