@@ -50,6 +50,12 @@ Value* rt_make_string(const char* s);
 Value* rt_make_none();
 Value* rt_array_new();
 void rt_array_push(Value* arr, Value* v);
+Value* rt_array_get_i64(Value* arr, int64_t index);
+Value* rt_array_set_i64(Value* arr, int64_t index, int64_t value);
+Value* rt_array_push_i64(Value* arr, int64_t value);
+int64_t rt_array_pop_i64(Value* arr);
+int64_t rt_i64_memo_lookup(int64_t memo_id, int64_t arg, int64_t* out);
+void rt_i64_memo_store(int64_t memo_id, int64_t arg, int64_t value);
 
 Value* rt_get_var(const char* name);
 Value* rt_set_var(const char* name, Value* v);
