@@ -33,6 +33,7 @@ const std::string NODE_STRUCTDEF("STRUCTDEF");
 const std::string NODE_RETURN("RETURN");
 const std::string NODE_BREAK("BREAK");
 const std::string NODE_CONTINUE("CONTINUE");
+const std::string NODE_PRECOMPUTED("PRECOMPUTED");
 const std::string TAB{"    "};
 
 class Node {

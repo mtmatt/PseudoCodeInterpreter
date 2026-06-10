@@ -1,4 +1,5 @@
 #include "pseudo.h"
+#include "imports.h"
 #include "color.h"
 #include "interpreter.h"
 #include "node.h"
@@ -1206,11 +1207,6 @@ std::shared_ptr<Value> StructValue::execute(const NodeList& args,
 
 namespace {
 
-struct ImportState {
-  std::set<std::string> loaded;
-  std::set<std::string> loading;
-};
-
 std::string trim(const std::string &str) {
   size_t begin = 0;
   while (begin < str.size() &&
@@ -1304,6 +1300,8 @@ bool resolve_import(const std::string &target,
   return false;
 }
 
+} // namespace
+
 bool expand_imports(const std::string &file_name, const std::string &text,
                     ImportState &state, std::string &expanded,
                     std::string &error) {
@@ -1357,8 +1355,6 @@ bool expand_imports(const std::string &file_name, const std::string &text,
   }
   return true;
 }
-
-} // namespace
 
 std::string run(std::string file_name, std::string text,
                 SymbolTable &global_symbol_table) {

@@ -106,6 +106,9 @@ std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
     if(node->get_type() == NODE_CONTINUE) {
         return std::make_shared<ControlValue>(VALUE_CONTINUE);
     }
+    if(node->get_type() == NODE_PRECOMPUTED) {
+        return dynamic_cast<PrecomputedNode*>(node.get())->get_value();
+    }
     return std::make_shared<ErrorValue>(VALUE_ERROR, "Fail to get result\n");
 }
 

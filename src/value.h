@@ -36,7 +36,7 @@ const std::map<char, char> REVERSE_ESCAPE_CHAR {
 
 class SymbolTable;
 class Interpreter;
-class Value {
+class Value: public std::enable_shared_from_this<Value> {
 public:
     Value(const std::string& _type = VALUE_NONE)
         : type(_type) {}
@@ -262,6 +262,19 @@ class ControlValue : public Value {
 public:
     ControlValue(const std::string& _type)
         : Value(_type) {}
+};
+
+// Wraps an already-evaluated value as an AST node so compiled code can reuse
+// interpreter execution paths that expect argument nodes (builtins, methods).
+class PrecomputedNode: public Node {
+public:
+    explicit PrecomputedNode(std::shared_ptr<Value> _value)
+        : value(_value) {}
+    std::string get_node() override { return "PRECOMPUTED";}
+    std::string get_type() override { return NODE_PRECOMPUTED;}
+    std::shared_ptr<Value> get_value() { return value;}
+protected:
+    std::shared_ptr<Value> value;
 };
 
 template class TypedValue<double>;
