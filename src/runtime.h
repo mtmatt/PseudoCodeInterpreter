@@ -44,45 +44,47 @@ extern "C" {
 
 void rt_init();
 
-Value *rt_make_int(int64_t v);
-Value *rt_make_float(double v);
-Value *rt_make_string(const char *s);
-Value *rt_make_none();
-Value *rt_array_new();
-void rt_array_push(Value *arr, Value *v);
+Value* rt_make_int(int64_t v);
+Value* rt_make_float(double v);
+Value* rt_make_string(const char* s);
+Value* rt_make_none();
+Value* rt_array_new();
+void rt_array_push(Value* arr, Value* v);
 
-Value *rt_get_var(const char *name);
-Value *rt_set_var(const char *name, Value *v);
+Value* rt_get_var(const char* name);
+Value* rt_set_var(const char* name, Value* v);
 
-Value *rt_bin_op(int64_t op, Value *a, Value *b);
-Value *rt_unary_op(int64_t op, Value *a);
+Value* rt_bin_op(int64_t op, Value* a, Value* b);
+Value* rt_unary_op(int64_t op, Value* a);
 // Int 0/1 value from as_int() != 0 (used by short-circuit and/or).
-Value *rt_bool(Value *v);
+Value* rt_bool(Value* v);
 
 // stoll(get_num()) == 1, the interpreter's `if` condition.
-int64_t rt_cond_eq1(Value *v);
+int64_t rt_cond_eq1(Value* v);
 // as_int(), the interpreter's `while` / `repeat` condition.
-int64_t rt_as_int(Value *v);
+int64_t rt_as_int(Value* v);
 // Float-aware inclusive bound check matching Interpreter::visit_for.
-int64_t rt_for_cond(Value *i, Value *end, Value *step);
+int64_t rt_for_cond(Value* i, Value* end, Value* step);
 // Errors out (like the interpreter) when step == 0.
-void rt_for_step_check(Value *step);
+void rt_for_step_check(Value* step);
 
-Value *rt_index(Value *obj, Value *idx);
-Value *rt_index_assign(Value *obj, Value *idx, Value *v);
-Value *rt_member_access(Value *obj, const char *name);
-Value *rt_member_assign(Value *obj, const char *name, Value *v);
+Value* rt_index(Value* obj, Value* idx);
+Value* rt_index_assign(Value* obj, Value* idx, Value* v);
+Value* rt_member_access(Value* obj, const char* name);
+Value* rt_member_assign(Value* obj, const char* name, Value* v);
 
-Value *rt_define_algo(const char *name, Value *(*fn)(),
-                      const char *const *arg_names, int64_t nargs);
-Value *rt_call(Value *callee, Value **argv, int64_t argc);
+// `memoizable` enables the same by-argument result caching the interpreter
+// applies to recursive pure-numeric algorithms.
+Value* rt_define_algo(const char* name, Value* (*fn)(), const char* const* arg_names, int64_t nargs,
+                      int64_t memoizable);
+Value* rt_call(Value* callee, Value** argv, int64_t argc);
 
 int64_t rt_frame_mark();
 void rt_frame_push();
 void rt_frame_release(int64_t mark);
 // Replaces the contents of frame `frame_index` with just `v`: keeps the
 // current loop variable alive for one iteration without per-iteration growth.
-void rt_loop_keep(int64_t frame_index, Value *v);
+void rt_loop_keep(int64_t frame_index, Value* v);
 }
 
 #endif
