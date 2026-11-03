@@ -27,13 +27,13 @@ constexpr int JIT_HOT_THRESHOLD = 8;
 
 bool is_jit_root(const std::shared_ptr<Node>& node) {
     if (!node) return false;
-    return node->get_type() == NODE_BINOP || node->get_type() == NODE_UNARYOP ||
-           node->get_type() == NODE_ALGOCALL;
+    NodeType type = node->get_type();
+    return type == NODE_BINOP || type == NODE_UNARYOP || type == NODE_ALGOCALL;
 }
 
 bool has_assignment_node(const std::shared_ptr<Node>& node) {
     if (!node) return false;
-    std::string type = node->get_type();
+    NodeType type = node->get_type();
     if (type == NODE_VARASSIGN || type == NODE_ARRASSIGN) {
         return true;
     }
@@ -60,67 +60,50 @@ std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
         return *jit_result;
     }
 
-    if (node->get_type() == NODE_VALUE) {
-        return visit_number(node);
+    switch (node->get_type()) {
+        case NODE_VALUE:
+            return visit_number(node);
+        case NODE_VARACCESS:
+            return visit_var_access(node);
+        case NODE_VARASSIGN:
+            return visit_var_assign(node);
+        case NODE_BINOP:
+            return visit_bin_op(node);
+        case NODE_UNARYOP:
+            return visit_unary_op(node);
+        case NODE_IF:
+            return visit_if(node);
+        case NODE_FOR:
+            return visit_for(node);
+        case NODE_WHILE:
+            return visit_while(node);
+        case NODE_REPEAT:
+            return visit_repeat(node);
+        case NODE_ALGODEF:
+            return visit_algo_def(node);
+        case NODE_STRUCTDEF:
+            return visit_struct_def(node);
+        case NODE_ALGOCALL:
+            return visit_algo_call(node);
+        case NODE_ARRAY:
+            return visit_array(node);
+        case NODE_ARRACCESS:
+            return visit_array_access(node);
+        case NODE_ARRASSIGN:
+            return visit_array_assign(node);
+        case NODE_MEMACCESS:
+            return visit_member_access(node);
+        case NODE_RETURN:
+            return visit_return(node);
+        case NODE_BREAK:
+            return std::make_shared<ControlValue>(VALUE_BREAK);
+        case NODE_CONTINUE:
+            return std::make_shared<ControlValue>(VALUE_CONTINUE);
+        case NODE_PRECOMPUTED:
+            return dynamic_cast<PrecomputedNode*>(node.get())->get_value();
+        default:
+            return std::make_shared<ErrorValue>(VALUE_ERROR, "Fail to get result\n");
     }
-    if (node->get_type() == NODE_VARACCESS) {
-        return visit_var_access(node);
-    }
-    if (node->get_type() == NODE_VARASSIGN) {
-        return visit_var_assign(node);
-    }
-    if (node->get_type() == NODE_BINOP) {
-        return visit_bin_op(node);
-    }
-    if (node->get_type() == NODE_UNARYOP) {
-        return visit_unary_op(node);
-    }
-    if (node->get_type() == NODE_IF) {
-        return visit_if(node);
-    }
-    if (node->get_type() == NODE_FOR) {
-        return visit_for(node);
-    }
-    if (node->get_type() == NODE_WHILE) {
-        return visit_while(node);
-    }
-    if (node->get_type() == NODE_REPEAT) {
-        return visit_repeat(node);
-    }
-    if (node->get_type() == NODE_ALGODEF) {
-        return visit_algo_def(node);
-    }
-    if (node->get_type() == NODE_STRUCTDEF) {
-        return visit_struct_def(node);
-    }
-    if (node->get_type() == NODE_ALGOCALL) {
-        return visit_algo_call(node);
-    }
-    if (node->get_type() == NODE_ARRAY) {
-        return visit_array(node);
-    }
-    if (node->get_type() == NODE_ARRACCESS) {
-        return visit_array_access(node);
-    }
-    if (node->get_type() == NODE_ARRASSIGN) {
-        return visit_array_assign(node);
-    }
-    if (node->get_type() == NODE_MEMACCESS) {
-        return visit_member_access(node);
-    }
-    if (node->get_type() == NODE_RETURN) {
-        return visit_return(node);
-    }
-    if (node->get_type() == NODE_BREAK) {
-        return std::make_shared<ControlValue>(VALUE_BREAK);
-    }
-    if (node->get_type() == NODE_CONTINUE) {
-        return std::make_shared<ControlValue>(VALUE_CONTINUE);
-    }
-    if (node->get_type() == NODE_PRECOMPUTED) {
-        return dynamic_cast<PrecomputedNode*>(node.get())->get_value();
-    }
-    return std::make_shared<ErrorValue>(VALUE_ERROR, "Fail to get result\n");
 }
 
 std::optional<std::shared_ptr<Value>> Interpreter::try_visit_jit(
@@ -822,45 +805,54 @@ std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(
 
 std::shared_ptr<Value> Interpreter::bin_op(std::shared_ptr<Value> a, std::shared_ptr<Value> b,
                                            std::shared_ptr<Token> op) {
-    if (op->get_type() == TOKEN_ADD)
-        return a + b;
-    else if (op->get_type() == TOKEN_SUB)
-        return a - b;
-    else if (op->get_type() == TOKEN_MUL)
-        return a * b;
-    else if (op->get_type() == TOKEN_DIV)
-        return a / b;
-    else if (op->get_type() == TOKEN_MOD)
-        return a % b;
-    else if (op->get_type() == TOKEN_POW)
-        return pow(a, b);  // NOLINT(misc-include-cleaner): value.h overload
-    else if (op->get_type() == TOKEN_EQUAL)
-        return a == b;
-    else if (op->get_type() == TOKEN_NEQ)
-        return a != b;
-    else if (op->get_type() == TOKEN_LESS)
-        return a < b;
-    else if (op->get_type() == TOKEN_GREATER)
-        return a > b;
-    else if (op->get_type() == TOKEN_LEQ)
-        return a <= b;
-    else if (op->get_type() == TOKEN_GEQ)
-        return a >= b;
-    else if (op->get_type() == TOKEN_KEYWORD && op->get_value() == "and")
-        return a && b;
-    else if (op->get_type() == TOKEN_KEYWORD && op->get_value() == "or")
-        return a || b;
+    switch (op->get_type()) {
+        case TOKEN_ADD:
+            return a + b;
+        case TOKEN_SUB:
+            return a - b;
+        case TOKEN_MUL:
+            return a * b;
+        case TOKEN_DIV:
+            return a / b;
+        case TOKEN_MOD:
+            return a % b;
+        case TOKEN_POW:
+            return pow(a, b);  // NOLINT(misc-include-cleaner): value.h overload
+        case TOKEN_EQUAL:
+            return a == b;
+        case TOKEN_NEQ:
+            return a != b;
+        case TOKEN_LESS:
+            return a < b;
+        case TOKEN_GREATER:
+            return a > b;
+        case TOKEN_LEQ:
+            return a <= b;
+        case TOKEN_GEQ:
+            return a >= b;
+        case TOKEN_KEYWORD:
+            if (op->get_value() == "and") return a && b;
+            if (op->get_value() == "or") return a || b;
+            break;
+        default:
+            break;
+    }
 
     return std::make_shared<ErrorValue>(VALUE_ERROR, "Not a binary op\n");
 }
 
 std::shared_ptr<Value> Interpreter::unary_op(std::shared_ptr<Value> a, std::shared_ptr<Token> op) {
-    if (op->get_type() == TOKEN_ADD)
-        return a;
-    else if (op->get_type() == TOKEN_SUB)
-        return -a;
-    else if (op->get_type() == TOKEN_KEYWORD && op->get_value() == "not")
-        return !a;
+    switch (op->get_type()) {
+        case TOKEN_ADD:
+            return a;
+        case TOKEN_SUB:
+            return -a;
+        case TOKEN_KEYWORD:
+            if (op->get_value() == "not") return !a;
+            break;
+        default:
+            break;
+    }
     return std::make_shared<ErrorValue>(VALUE_ERROR, "Not an unary op\n");
 }
 std::shared_ptr<Value> Interpreter::visit_struct_def(std::shared_ptr<Node> node) {

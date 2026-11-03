@@ -276,7 +276,7 @@ class PrecomputedNode : public Node {
    public:
     explicit PrecomputedNode(std::shared_ptr<Value> _value) : value(_value) {}
     std::string get_node() override { return "PRECOMPUTED"; }
-    std::string get_type() override { return NODE_PRECOMPUTED; }
+    NodeType get_type() override { return NODE_PRECOMPUTED; }
     std::shared_ptr<Value> get_value() { return value; }
 
    protected:

@@ -14,27 +14,33 @@
 
 #include "token.h"
 
-const std::string NODE_VALUE{"VALUE"};
-const std::string NODE_BINOP{"BINOP"};
-const std::string NODE_ERROR{"ERROR"};
-const std::string NODE_UNARYOP("UNARYOP");
-const std::string NODE_VARASSIGN("VARASSIGN");
-const std::string NODE_VARACCESS("VARACCESS");
-const std::string NODE_IF("IF");
-const std::string NODE_FOR("FOR");
-const std::string NODE_WHILE("WHILE");
-const std::string NODE_REPEAT("REPEAT");
-const std::string NODE_ALGODEF("ALGO");
-const std::string NODE_ALGOCALL("CALL");
-const std::string NODE_ARRAY("ARRAY");
-const std::string NODE_ARRACCESS("ARRACCESS");
-const std::string NODE_ARRASSIGN("ARRASSIGN");
-const std::string NODE_MEMACCESS("MEMACCESS");
-const std::string NODE_STRUCTDEF("STRUCTDEF");
-const std::string NODE_RETURN("RETURN");
-const std::string NODE_BREAK("BREAK");
-const std::string NODE_CONTINUE("CONTINUE");
-const std::string NODE_PRECOMPUTED("PRECOMPUTED");
+enum NodeType {
+    NODE_NONE,
+    NODE_VALUE,
+    NODE_BINOP,
+    NODE_ERROR,
+    NODE_UNARYOP,
+    NODE_VARASSIGN,
+    NODE_VARACCESS,
+    NODE_IF,
+    NODE_FOR,
+    NODE_WHILE,
+    NODE_REPEAT,
+    NODE_ALGODEF,
+    NODE_ALGOCALL,
+    NODE_ARRAY,
+    NODE_ARRACCESS,
+    NODE_ARRASSIGN,
+    NODE_MEMACCESS,
+    NODE_STRUCTDEF,
+    NODE_RETURN,
+    NODE_BREAK,
+    NODE_CONTINUE,
+    NODE_PRECOMPUTED,
+};
+
+const char* node_type_name(NodeType type);
+
 const std::string TAB{"    "};
 
 class Node {
@@ -45,7 +51,7 @@ class Node {
     virtual std::vector<std::shared_ptr<Node>> get_child() {
         return std::vector<std::shared_ptr<Node>>(0);
     }
-    virtual std::string get_type() { return "NONE"; }
+    virtual NodeType get_type() { return NODE_NONE; }
     virtual std::shared_ptr<Token> get_tok() { return nullptr; }
     virtual TokenList get_toks() { return TokenList(0); }
     virtual std::string get_name() { return ""; }
@@ -63,7 +69,7 @@ class ErrorNode : public Node {
     ErrorNode(std::shared_ptr<Token> _tok) : tok(_tok) {}
     std::string get_node() override;
     std::shared_ptr<Token> get_tok() override { return tok; }
-    std::string get_type() override { return NODE_ERROR; }
+    NodeType get_type() override { return NODE_ERROR; }
 
    protected:
     std::shared_ptr<Token> tok;
@@ -73,7 +79,7 @@ class ValueNode : public Node {
    public:
     ValueNode(std::shared_ptr<Token> _tok) : tok(_tok) {}
     std::string get_node() override;
-    std::string get_type() override { return NODE_VALUE; }
+    NodeType get_type() override { return NODE_VALUE; }
     std::shared_ptr<Token> get_tok() override { return tok; }
 
    protected:
@@ -86,7 +92,7 @@ class BinOpNode : public Node {
         : left_node(left), right_node(right), op_tok(tok) {}
     std::string get_node() override;
     NodeList get_child() override;
-    std::string get_type() override { return NODE_BINOP; }
+    NodeType get_type() override { return NODE_BINOP; }
     std::shared_ptr<Token> get_tok() override { return op_tok; }
 
    protected:
@@ -100,7 +106,7 @@ class UnaryOpNode : public Node {
         : node(_node), op_tok(tok) {}
     std::string get_node() override;
     NodeList get_child() override;
-    std::string get_type() override { return NODE_UNARYOP; }
+    NodeType get_type() override { return NODE_UNARYOP; }
     std::shared_ptr<Token> get_tok() override { return op_tok; }
 
    protected:
@@ -113,7 +119,7 @@ class VarAssignNode : public Node {
     VarAssignNode(std::string _name, std::shared_ptr<Node> _node) : name(_name), node(_node) {}
     std::string get_node() override;
     NodeList get_child() override { return NodeList{node}; }
-    std::string get_type() override { return NODE_VARASSIGN; }
+    NodeType get_type() override { return NODE_VARASSIGN; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
     std::string get_name() override { return name; }
 
@@ -127,7 +133,7 @@ class VarAccessNode : public Node {
     VarAccessNode(std::shared_ptr<Token> _tok) : tok(_tok) {}
     std::string get_node() override;
     NodeList get_child() override { return NodeList(0); }
-    std::string get_type() override { return NODE_VARACCESS; }
+    NodeType get_type() override { return NODE_VARACCESS; }
     std::shared_ptr<Token> get_tok() override { return tok; }
     std::string get_name() override { return tok->get_value(); }
 
@@ -146,7 +152,7 @@ class IfNode : public Node {
     const std::shared_ptr<Node>& get_condition() { return condition_node; }
     const NodeList& get_expr() { return expr_node; }
     const NodeList& get_else() { return else_node; }
-    std::string get_type() override { return NODE_IF; }
+    NodeType get_type() override { return NODE_IF; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
     std::string get_name() override { return ""; }
 
@@ -169,7 +175,7 @@ class ForNode : public Node {
         for (auto node : body_node) child.push_back(node);
         return child;
     }
-    std::string get_type() override { return NODE_FOR; }
+    NodeType get_type() override { return NODE_FOR; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
     std::string get_name() override { return ""; }
 
@@ -188,7 +194,7 @@ class WhileNode : public Node {
         for (auto node : body_node) child.push_back(node);
         return child;
     }
-    std::string get_type() override { return NODE_WHILE; }
+    NodeType get_type() override { return NODE_WHILE; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
     std::string get_name() override { return ""; }
 
@@ -207,7 +213,7 @@ class RepeatNode : public Node {
         for (auto node : body_node) child.push_back(node);
         return child;
     }
-    std::string get_type() override { return NODE_REPEAT; }
+    NodeType get_type() override { return NODE_REPEAT; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
     std::string get_name() override { return ""; }
 
@@ -224,7 +230,7 @@ class AlgorithmDefNode : public Node {
     std::string get_node() override;
     NodeList get_child() override { return body_node; }
     const NodeList& get_body() const { return body_node; }
-    std::string get_type() override { return NODE_ALGODEF; }
+    NodeType get_type() override { return NODE_ALGODEF; }
     std::shared_ptr<Token> get_tok() override { return algo_name; }
     TokenList get_toks() override { return args_name; }
     std::string get_name() override { return algo_name->get_value(); }
@@ -242,7 +248,7 @@ class AlgorithmCallNode : public Node {
     std::string get_node() override;
     NodeList get_child() override { return args; }
     const NodeList& get_args() const { return args; }
-    std::string get_type() override { return NODE_ALGOCALL; }
+    NodeType get_type() override { return NODE_ALGOCALL; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
     std::string get_name() override { return call_node->get_name(); }
     std::shared_ptr<Node> get_call() { return call_node; }
@@ -257,7 +263,7 @@ class ArrayNode : public Node {
     ArrayNode(const NodeList& _elements_node) : elements_node(_elements_node) {}
     std::string get_node() override;
     NodeList get_child() override { return elements_node; }
-    std::string get_type() override { return NODE_ARRAY; }
+    NodeType get_type() override { return NODE_ARRAY; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
     std::string get_name() override { return ""; }
 
@@ -271,7 +277,7 @@ class ArrayAccessNode : public Node {
         : arr(_arr), index(_index) {}
     std::string get_node() override;
     NodeList get_child() override { return NodeList{arr, index}; }
-    std::string get_type() override { return NODE_ARRACCESS; }
+    NodeType get_type() override { return NODE_ARRACCESS; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
 
    protected:
@@ -284,7 +290,7 @@ class ArrayAssignNode : public Node {
         : arr(_arr), value(_value) {}
     std::string get_node() override;
     NodeList get_child() override { return NodeList{arr, value}; }
-    std::string get_type() override { return NODE_ARRASSIGN; }
+    NodeType get_type() override { return NODE_ARRASSIGN; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
 
    protected:
@@ -297,7 +303,7 @@ class MemberAccessNode : public Node {
         : obj(_obj), member(_member) {}
     std::string get_node() override;
     NodeList get_child() override { return NodeList{obj, member}; }
-    std::string get_type() override { return NODE_MEMACCESS; }
+    NodeType get_type() override { return NODE_MEMACCESS; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
 
    protected:
@@ -311,7 +317,7 @@ class StructDefNode : public Node {
         : struct_name(_struct_name), members(_members), methods(_methods) {}
     std::string get_node() override;
     NodeList get_child() override { return methods; }
-    std::string get_type() override { return NODE_STRUCTDEF; }
+    NodeType get_type() override { return NODE_STRUCTDEF; }
     std::shared_ptr<Token> get_tok() override { return struct_name; }
     TokenList get_toks() override { return members; }
     std::string get_name() override { return struct_name->get_value(); }
@@ -327,7 +333,7 @@ class ReturnNode : public Node {
     ReturnNode(std::shared_ptr<Node> _node) : node(_node) {}
     std::string get_node() override { return "RETURN " + node->get_node(); }
     NodeList get_child() override { return NodeList{node}; }
-    std::string get_type() override { return NODE_RETURN; }
+    NodeType get_type() override { return NODE_RETURN; }
     std::shared_ptr<Token> get_tok() override { return nullptr; }
     std::string get_name() override { return ""; }
 
@@ -337,12 +343,12 @@ class ReturnNode : public Node {
 
 class ControlNode : public Node {
    public:
-    ControlNode(const std::string& _type) : control_type(_type) {}
-    std::string get_node() override { return control_type; }
-    std::string get_type() override { return control_type; }
+    ControlNode(NodeType _type) : control_type(_type) {}
+    std::string get_node() override { return node_type_name(control_type); }
+    NodeType get_type() override { return control_type; }
 
    protected:
-    std::string control_type;
+    NodeType control_type;
 };
 
 #endif

@@ -9,6 +9,7 @@
 
 #include "compiler.h"
 
+#include <llvm/IR/Argument.h>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
@@ -29,6 +30,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "analysis.h"
@@ -236,7 +238,7 @@ class CodeGen {
     // runtime Value) or nullptr when the node terminated the current block
     // (break/continue/return) or reported a compile error.
     llvm::Value* gen(const std::shared_ptr<Node>& node) {
-        std::string type = node->get_type();
+        NodeType type = node->get_type();
         if (type == NODE_VALUE) return gen_literal(node);
         if (type == NODE_VARACCESS) return gen_var_access(node);
         if (type == NODE_VARASSIGN) return gen_var_assign(node);
@@ -256,7 +258,7 @@ class CodeGen {
         if (type == NODE_BREAK) return gen_loop_jump(node, true);
         if (type == NODE_CONTINUE) return gen_loop_jump(node, false);
         if (type == NODE_STRUCTDEF) return gen_struct_def(node);
-        error("compile error: unsupported statement " + type, node);
+        error(std::string("compile error: unsupported statement ") + node_type_name(type), node);
         return nullptr;
     }
 
@@ -288,7 +290,8 @@ class CodeGen {
             return builder.CreateCall(get_rt("rt_make_string", ptr_ty, {ptr_ty}),
                                       {cstring(tok->get_value())});
         }
-        error("compile error: unsupported literal " + tok->get_type(), node);
+        error(std::string("compile error: unsupported literal ") + token_type_name(tok->get_type()),
+              node);
         return nullptr;
     }
 
@@ -302,15 +305,15 @@ class CodeGen {
     }
 
     llvm::Value* gen_var_assign(const std::shared_ptr<Node>& node) {
-        const std::string name = node->get_name();
+        const std::string NAME = node->get_name();
         std::shared_ptr<Node> rhs = node->get_child()[0];
         if (can_i64_expr(rhs)) {
             llvm::Value* value = gen_i64_expr(rhs);
-            llvm::AllocaInst* slot = ensure_i64_slot(name);
+            llvm::AllocaInst* slot = ensure_i64_slot(NAME);
             builder.CreateStore(value, slot);
-            native_i64_vars[name].dirty = true;
-            known_arrays.erase(name);
-            numeric_arrays.erase(name);
+            native_i64_vars[NAME].dirty = true;
+            known_arrays.erase(NAME);
+            numeric_arrays.erase(NAME);
             return box_i64(value);
         }
 
@@ -318,20 +321,20 @@ class CodeGen {
         if (value == nullptr) {
             return nullptr;
         }
-        native_i64_vars.erase(name);
+        native_i64_vars.erase(NAME);
         if (rhs->get_type() == NODE_ARRAY) {
-            known_arrays.insert(name);
+            known_arrays.insert(NAME);
             if (is_numeric_array_literal(rhs)) {
-                numeric_arrays.insert(name);
+                numeric_arrays.insert(NAME);
             } else {
-                numeric_arrays.erase(name);
+                numeric_arrays.erase(NAME);
             }
         } else {
-            known_arrays.erase(name);
-            numeric_arrays.erase(name);
+            known_arrays.erase(NAME);
+            numeric_arrays.erase(NAME);
         }
         return builder.CreateCall(get_rt("rt_set_var", ptr_ty, {ptr_ty, ptr_ty}),
-                                  {cstring(name), value});
+                                  {cstring(NAME), value});
     }
 
     llvm::Value* as_int(llvm::Value* value) {
@@ -392,7 +395,7 @@ class CodeGen {
         if (!node) return false;
         if (!native_i64_enabled && allowed_vars == nullptr) return false;
 
-        std::string type = node->get_type();
+        NodeType type = node->get_type();
         if (type == NODE_VALUE) {
             return node->get_tok()->get_type() == TOKEN_INT;
         }
@@ -418,7 +421,7 @@ class CodeGen {
                 return false;
             }
             std::shared_ptr<Token> op = node->get_tok();
-            const std::string& op_type = op->get_type();
+            TokenType op_type = op->get_type();
             if (op_type == TOKEN_ADD || op_type == TOKEN_SUB || op_type == TOKEN_MUL ||
                 op_type == TOKEN_EQUAL || op_type == TOKEN_NEQ || op_type == TOKEN_LESS ||
                 op_type == TOKEN_GREATER || op_type == TOKEN_LEQ || op_type == TOKEN_GEQ) {
@@ -427,7 +430,8 @@ class CodeGen {
             if ((op_type == TOKEN_DIV || op_type == TOKEN_MOD) && known_nonzero_i64(child[1])) {
                 return true;
             }
-            return op_type == TOKEN_KEYWORD && (op->get_value() == "and" || op->get_value() == "or");
+            return op_type == TOKEN_KEYWORD &&
+                   (op->get_value() == "and" || op->get_value() == "or");
         }
         if (type == NODE_ARRACCESS && allowed_vars == nullptr) {
             NodeList child = node->get_child();
@@ -448,15 +452,15 @@ class CodeGen {
             if (call->get_call()->get_type() != NODE_VARACCESS) {
                 return false;
             }
-            const std::string name = call->get_name();
+            const std::string NAME = call->get_name();
             const NodeList& args = call->get_args();
             bool known = false;
             size_t arity = 0;
-            if (!self_name.empty() && name == self_name) {
+            if (!self_name.empty() && NAME == self_name) {
                 known = true;
                 arity = self_arity;
             } else {
-                auto found = native_i64_algos.find(name);
+                auto found = native_i64_algos.find(NAME);
                 if (found != native_i64_algos.end()) {
                     known = true;
                     arity = found->second.arity;
@@ -476,7 +480,7 @@ class CodeGen {
     }
 
     llvm::Value* gen_i64_expr(const std::shared_ptr<Node>& node) {
-        std::string type = node->get_type();
+        NodeType type = node->get_type();
         if (type == NODE_VALUE) {
             return builder.getInt64(*int_literal(node));
         }
@@ -490,7 +494,8 @@ class CodeGen {
                 return builder.CreateNeg(operand);
             }
             if (op->get_type() == TOKEN_KEYWORD && op->get_value() == "not") {
-                return builder.CreateZExt(builder.CreateICmpEQ(operand, builder.getInt64(0)), i64_ty);
+                return builder.CreateZExt(builder.CreateICmpEQ(operand, builder.getInt64(0)),
+                                          i64_ty);
             }
             return operand;
         }
@@ -499,18 +504,24 @@ class CodeGen {
             llvm::Value* lhs = gen_i64_expr(child[0]);
             llvm::Value* rhs = gen_i64_expr(child[1]);
             std::shared_ptr<Token> op = node->get_tok();
-            const std::string& op_type = op->get_type();
+            TokenType op_type = op->get_type();
             if (op_type == TOKEN_ADD) return builder.CreateAdd(lhs, rhs);
             if (op_type == TOKEN_SUB) return builder.CreateSub(lhs, rhs);
             if (op_type == TOKEN_MUL) return builder.CreateMul(lhs, rhs);
             if (op_type == TOKEN_DIV) return builder.CreateSDiv(lhs, rhs);
             if (op_type == TOKEN_MOD) return builder.CreateSRem(lhs, rhs);
-            if (op_type == TOKEN_EQUAL) return builder.CreateZExt(builder.CreateICmpEQ(lhs, rhs), i64_ty);
-            if (op_type == TOKEN_NEQ) return builder.CreateZExt(builder.CreateICmpNE(lhs, rhs), i64_ty);
-            if (op_type == TOKEN_LESS) return builder.CreateZExt(builder.CreateICmpSLT(lhs, rhs), i64_ty);
-            if (op_type == TOKEN_GREATER) return builder.CreateZExt(builder.CreateICmpSGT(lhs, rhs), i64_ty);
-            if (op_type == TOKEN_LEQ) return builder.CreateZExt(builder.CreateICmpSLE(lhs, rhs), i64_ty);
-            if (op_type == TOKEN_GEQ) return builder.CreateZExt(builder.CreateICmpSGE(lhs, rhs), i64_ty);
+            if (op_type == TOKEN_EQUAL)
+                return builder.CreateZExt(builder.CreateICmpEQ(lhs, rhs), i64_ty);
+            if (op_type == TOKEN_NEQ)
+                return builder.CreateZExt(builder.CreateICmpNE(lhs, rhs), i64_ty);
+            if (op_type == TOKEN_LESS)
+                return builder.CreateZExt(builder.CreateICmpSLT(lhs, rhs), i64_ty);
+            if (op_type == TOKEN_GREATER)
+                return builder.CreateZExt(builder.CreateICmpSGT(lhs, rhs), i64_ty);
+            if (op_type == TOKEN_LEQ)
+                return builder.CreateZExt(builder.CreateICmpSLE(lhs, rhs), i64_ty);
+            if (op_type == TOKEN_GEQ)
+                return builder.CreateZExt(builder.CreateICmpSGE(lhs, rhs), i64_ty);
             if (op_type == TOKEN_KEYWORD && op->get_value() == "and") {
                 return builder.CreateZExt(
                     builder.CreateAnd(builder.CreateICmpNE(lhs, builder.getInt64(0)),
@@ -529,9 +540,8 @@ class CodeGen {
             std::string array_name = child[0]->get_name();
             llvm::Value* container = gen_direct_array_var(array_name);
             llvm::Value* index = gen_i64_expr(child[1]);
-            llvm::Value* value =
-                builder.CreateCall(get_rt("rt_array_get_i64", ptr_ty, {ptr_ty, i64_ty}),
-                                   {container, index});
+            llvm::Value* value = builder.CreateCall(
+                get_rt("rt_array_get_i64", ptr_ty, {ptr_ty, i64_ty}), {container, index});
             return as_int(value);
         }
         if (type == NODE_ALGOCALL) {
@@ -544,8 +554,8 @@ class CodeGen {
                                           {gen_direct_array_var(array_name)});
             }
             AlgorithmCallNode* call = dynamic_cast<AlgorithmCallNode*>(node.get());
-            const std::string name = call->get_name();
-            llvm::Function* fn = native_i64_algos.at(name).fn;
+            const std::string NAME = call->get_name();
+            llvm::Function* fn = native_i64_algos.at(NAME).fn;
             std::vector<llvm::Value*> args;
             args.reserve(call->get_args().size());
             for (const auto& arg : call->get_args()) {
@@ -568,7 +578,7 @@ class CodeGen {
             return gen_short_circuit(node, op->get_value() == "and");
         }
 
-        static const std::map<std::string, int64_t> OP_CODES{
+        static const std::map<TokenType, int64_t> OP_CODES{
             {TOKEN_ADD, RT_OP_ADD},         {TOKEN_SUB, RT_OP_SUB}, {TOKEN_MUL, RT_OP_MUL},
             {TOKEN_DIV, RT_OP_DIV},         {TOKEN_MOD, RT_OP_MOD}, {TOKEN_POW, RT_OP_POW},
             {TOKEN_EQUAL, RT_OP_EQUAL},     {TOKEN_NEQ, RT_OP_NEQ}, {TOKEN_LESS, RT_OP_LESS},
@@ -576,7 +586,9 @@ class CodeGen {
         };
         auto code = OP_CODES.find(op->get_type());
         if (code == OP_CODES.end()) {
-            error("compile error: unsupported operator " + op->get_type(), node);
+            error(std::string("compile error: unsupported operator ") +
+                      token_type_name(op->get_type()),
+                  node);
             return nullptr;
         }
 
@@ -640,7 +652,9 @@ class CodeGen {
         } else if (op->get_type() == TOKEN_KEYWORD && op->get_value() == "not") {
             code = RT_OP_UNOT;
         } else {
-            error("compile error: unsupported unary operator " + op->get_type(), node);
+            error(std::string("compile error: unsupported unary operator ") +
+                      token_type_name(op->get_type()),
+                  node);
             return nullptr;
         }
         llvm::Value* operand = gen(node->get_child()[0]);
@@ -683,12 +697,12 @@ class CodeGen {
 
     bool gen_native_for_stmt(const std::shared_ptr<Node>& stmt) {
         if (stmt->get_type() == NODE_VARASSIGN) {
-            const std::string name = stmt->get_name();
+            const std::string NAME = stmt->get_name();
             llvm::Value* value = gen_i64_expr(stmt->get_child()[0]);
-            llvm::AllocaInst* slot = ensure_i64_slot(name);
+            llvm::AllocaInst* slot = ensure_i64_slot(NAME);
             builder.CreateStore(value, slot);
-            native_i64_vars[name].dirty = true;
-            known_arrays.erase(name);
+            native_i64_vars[NAME].dirty = true;
+            known_arrays.erase(NAME);
             return true;
         }
         if (stmt->get_type() == NODE_ARRASSIGN) {
@@ -1111,8 +1125,9 @@ class CodeGen {
 
     void emit_native_i64_return(llvm::Value* value) {
         if (active_i64_memo_id && active_i64_memo_arg != nullptr) {
-            builder.CreateCall(get_rt("rt_i64_memo_store", builder.getVoidTy(), {i64_ty, i64_ty, i64_ty}),
-                               {builder.getInt64(*active_i64_memo_id), active_i64_memo_arg, value});
+            builder.CreateCall(
+                get_rt("rt_i64_memo_store", builder.getVoidTy(), {i64_ty, i64_ty, i64_ty}),
+                {builder.getInt64(*active_i64_memo_id), active_i64_memo_arg, value});
         }
         builder.CreateRet(value);
     }
@@ -1333,9 +1348,9 @@ class CodeGen {
             (method_name == "push" || method_name == "push_back") && direct_args.size() == 1 &&
             can_i64_expr(direct_args[0])) {
             llvm::Value* raw_value = gen_i64_expr(direct_args[0]);
-            llvm::Value* value = builder.CreateCall(
-                get_rt("rt_array_push_i64", ptr_ty, {ptr_ty, i64_ty}),
-                {gen_direct_array_var(array_name), raw_value});
+            llvm::Value* value =
+                builder.CreateCall(get_rt("rt_array_push_i64", ptr_ty, {ptr_ty, i64_ty}),
+                                   {gen_direct_array_var(array_name), raw_value});
             if (numeric_arrays.count(array_name) != 0) {
                 numeric_arrays.insert(array_name);
             }
@@ -1343,8 +1358,7 @@ class CodeGen {
         }
 
         if (is_direct_array_method_call(node, array_name, method_name, direct_args)) {
-            if ((method_name == "push" || method_name == "push_back" ||
-                 method_name == "insert") &&
+            if ((method_name == "push" || method_name == "push_back" || method_name == "insert") &&
                 !direct_args.empty() && !can_i64_expr(direct_args.back())) {
                 numeric_arrays.erase(array_name);
             }

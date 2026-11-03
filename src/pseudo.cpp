@@ -320,9 +320,9 @@ bool is_pure_numeric_node(const std::shared_ptr<Node>& node, const std::string& 
                           const std::unordered_set<std::string>& arg_names) {
     if (!node) return false;
 
-    std::string type = node->get_type();
+    NodeType type = node->get_type();
     if (type == NODE_VALUE) {
-        std::string token_type = node->get_tok()->get_type();
+        TokenType token_type = node->get_tok()->get_type();
         return token_type == TOKEN_INT || token_type == TOKEN_FLOAT;
     }
     if (type == NODE_VARACCESS) {

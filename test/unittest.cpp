@@ -1,19 +1,105 @@
-#include <cstdio>
 #include <gtest/gtest.h>
-#include <token.h>
-#include <lexer.h>
-#include <symboltable.h>
-#include <value.h>
-#include <parser.h>
 #include <interpreter.h>
+#include <lexer.h>
+#include <node.h>
+#include <parser.h>
 #include <pseudo.h>
+#include <symboltable.h>
+#include <token.h>
+#include <value.h>
+
+#include <cstdint>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
+
+static_assert(std::is_enum_v<decltype(std::declval<Token&>().get_type())>);
+static_assert(std::is_enum_v<decltype(std::declval<Node&>().get_type())>);
 
 // Token Tests
 TEST(TokenTest, EmptyTokenInTypeNone) {
-  Token token;
-  EXPECT_EQ(token.get_type(), TOKEN_NONE);
+    Token token;
+    EXPECT_EQ(token.get_type(), TOKEN_NONE);
+}
+
+TEST(TokenTest, PreservesDisplayNames) {
+    Lexer lexer("test", "true print \"hello\"\n; ::");
+    TokenList tokens = lexer.make_tokens();
+    std::ostringstream output;
+    output << tokens;
+    EXPECT_EQ(output.str(),
+              "{BICONST: true\x1b[0m, BIALGO: print\x1b[0m, STR: hello\x1b[0m, "
+              "NEWL, SEMIC, SCOPERES}");
+
+    Token empty;
+    EXPECT_EQ(empty.get_tok(), "NONE");
+}
+
+TEST(TokenTest, PreservesErrorTokenDisplay) {
+    ErrorToken error(TOKEN_ERROR, Position(4, 2, 3, "sample.ps"), "Bad input");
+    EXPECT_EQ(error.get_tok(),
+              "\x1b[38;2;255;57;110mERROR: Bad input\x1b[0m"
+              "\x1b[38;2;219;128;255m. At File: sample.ps, Line: 2, Column: 3\x1b[0m");
+}
+
+TEST(NodeTest, PreservesControlAndExpressionDisplay) {
+    Lexer lexer("test", "break; continue; 1 + 2 * 3");
+    Parser parser(lexer.make_tokens());
+    NodeList nodes = parser.parse();
+    ASSERT_EQ(nodes.size(), 3);
+    EXPECT_EQ(nodes[0]->get_type(), NODE_BREAK);
+    EXPECT_EQ(nodes[0]->get_node(), "BREAK");
+    EXPECT_EQ(nodes[1]->get_type(), NODE_CONTINUE);
+    EXPECT_EQ(nodes[1]->get_node(), "CONTINUE");
+    EXPECT_EQ(nodes[2]->get_type(), NODE_BINOP);
+    EXPECT_EQ(nodes[2]->get_node(), "(INT: 1\x1b[0m, ADD, (INT: 2\x1b[0m, MUL, INT: 3\x1b[0m))");
+}
+
+TEST(DiagnosticTest, PreservesLexerAndParserMessages) {
+    struct ErrorCase {
+        const char* source;
+        const char* expected;
+    };
+    const ErrorCase CASES[] = {
+        {"x <- 1\n@\n", "Error: Illegal char '@'., line 2, column: 0\n2:    @\n      ^-\n"},
+        {"\"hello\n", "Error: Expected '\"', line 1, column: 0\n1:    \"hello\n      ^-\n"},
+        {"x <- [1, 2}\n",
+         "Error: Expected a \"]\", line 1, column: 10\n"
+         "1:    x <- [1, 2}\n      ----------^-\n"},
+        {"if true do 1\n",
+         "Error: Expected \"then\", line 1, column: 8\n"
+         "1:    if true do 1\n      --------^-\n"},
+        {"(1 + 2\n",
+         "Error: Not an atom, found \"Expected ')', line 1, column: 6\n"
+         "1:    (1 + 2\n      ------^-\n"},
+        {"Struct ::\n",
+         "Error: Expected an identifier, line 1, column: 7\n"
+         "1:    Struct ::\n      -------^-\n"},
+    };
+    for (const auto& error_case : CASES) {
+        SCOPED_TRACE(error_case.source);
+        SymbolTable symbols;
+        testing::internal::CaptureStdout();
+        const std::string RESULT = run("test", error_case.source, symbols);
+        const std::string OUTPUT = testing::internal::GetCapturedStdout();
+        EXPECT_EQ(RESULT, "ABORT");
+        EXPECT_EQ(OUTPUT, error_case.expected);
+    }
+}
+
+TEST(DiagnosticTest, PreservesInvalidOperatorValueMessages) {
+    const char* const SOURCES[] = {"1 ADD 2", "1 \"and\" 2", "1 \"ADD\" 2", "1 \"or\" 2"};
+    for (const char* source : SOURCES) {
+        SCOPED_TRACE(source);
+        SymbolTable symbols;
+        testing::internal::CaptureStdout();
+        const std::string RESULT = run("test", source, symbols);
+        const std::string OUTPUT = testing::internal::GetCapturedStdout();
+        EXPECT_EQ(RESULT, "ABORT");
+        EXPECT_EQ(OUTPUT, "Not a binary op\n\n");
+    }
 }
 
 // Lexer Tests
@@ -24,11 +110,11 @@ TEST(LexerTest, TestIntegerToken) {
     EXPECT_EQ(tokens[0]->get_type(), TOKEN_INT);
 
     // Check value
-    auto intToken = std::dynamic_pointer_cast<TypedToken<int64_t>>(tokens[0]);
+    auto int_token = std::dynamic_pointer_cast<TypedToken<int64_t>>(tokens[0]);
     // Use .get() to avoid overloaded operator! on shared_ptr<Value> (or related types)
-    ASSERT_NE(intToken.get(), nullptr);
+    ASSERT_NE(int_token.get(), nullptr);
     // Note: get_value() returns std::string representation of the value in this codebase
-    EXPECT_EQ(intToken->get_value(), "123");
+    EXPECT_EQ(int_token->get_value(), "123");
 }
 
 TEST(LexerTest, TestFloatToken) {
@@ -37,9 +123,9 @@ TEST(LexerTest, TestFloatToken) {
     ASSERT_EQ(tokens.size(), 1);
     EXPECT_EQ(tokens[0]->get_type(), TOKEN_FLOAT);
 
-    auto floatToken = std::dynamic_pointer_cast<TypedToken<double>>(tokens[0]);
-    ASSERT_NE(floatToken.get(), nullptr);
-    EXPECT_EQ(floatToken->get_value(), "123.456");
+    auto float_token = std::dynamic_pointer_cast<TypedToken<double>>(tokens[0]);
+    ASSERT_NE(float_token.get(), nullptr);
+    EXPECT_EQ(float_token->get_value(), "123.456");
 }
 
 TEST(LexerTest, TestIdentifierToken) {
@@ -48,9 +134,9 @@ TEST(LexerTest, TestIdentifierToken) {
     ASSERT_EQ(tokens.size(), 1);
     EXPECT_EQ(tokens[0]->get_type(), TOKEN_IDENTIFIER);
 
-    auto idToken = std::dynamic_pointer_cast<TypedToken<std::string>>(tokens[0]);
-    ASSERT_NE(idToken.get(), nullptr);
-    EXPECT_EQ(idToken->get_value(), "myVar");
+    auto id_token = std::dynamic_pointer_cast<TypedToken<std::string>>(tokens[0]);
+    ASSERT_NE(id_token.get(), nullptr);
+    EXPECT_EQ(id_token->get_value(), "myVar");
 }
 
 TEST(LexerTest, TestKeywordToken) {
@@ -59,9 +145,9 @@ TEST(LexerTest, TestKeywordToken) {
     ASSERT_EQ(tokens.size(), 1);
     EXPECT_EQ(tokens[0]->get_type(), TOKEN_KEYWORD);
 
-    auto keywordToken = std::dynamic_pointer_cast<TypedToken<std::string>>(tokens[0]);
-    ASSERT_NE(keywordToken.get(), nullptr);
-    EXPECT_EQ(keywordToken->get_value(), "if");
+    auto keyword_token = std::dynamic_pointer_cast<TypedToken<std::string>>(tokens[0]);
+    ASSERT_NE(keyword_token.get(), nullptr);
+    EXPECT_EQ(keyword_token->get_value(), "if");
 }
 
 TEST(LexerTest, TestOperators) {
@@ -104,9 +190,9 @@ TEST(SymbolTableTest, TestSetAndGet) {
     auto retrieved = st.get("x");
     ASSERT_NE(retrieved.get(), nullptr);
 
-    auto intVal = std::dynamic_pointer_cast<TypedValue<int64_t>>(retrieved);
-    ASSERT_NE(intVal.get(), nullptr);
-    EXPECT_EQ(intVal->get_num(), "42");
+    auto int_val = std::dynamic_pointer_cast<TypedValue<int64_t>>(retrieved);
+    ASSERT_NE(int_val.get(), nullptr);
+    EXPECT_EQ(int_val->get_num(), "42");
 }
 
 TEST(SymbolTableTest, TestGetNonExistent) {
@@ -118,8 +204,8 @@ TEST(SymbolTableTest, TestGetNonExistent) {
 
 TEST(SymbolTableTest, TestScope) {
     SymbolTable parent;
-    auto valParent = std::make_shared<TypedValue<int64_t>>(VALUE_INT, 100);
-    parent.set("x", valParent);
+    auto val_parent = std::make_shared<TypedValue<int64_t>>(VALUE_INT, 100);
+    parent.set("x", val_parent);
 
     SymbolTable child(&parent);
 
@@ -129,15 +215,15 @@ TEST(SymbolTableTest, TestScope) {
     EXPECT_EQ(retrieved->get_num(), "100");
 
     // Shadowing
-    auto valChild = std::make_shared<TypedValue<int64_t>>(VALUE_INT, 200);
-    child.set("x", valChild);
+    auto val_child = std::make_shared<TypedValue<int64_t>>(VALUE_INT, 200);
+    child.set("x", val_child);
 
     retrieved = child.get("x");
     EXPECT_EQ(retrieved->get_num(), "200");
 
     // Parent should remain unchanged
-    auto parentRetrieved = parent.get("x");
-    EXPECT_EQ(parentRetrieved->get_num(), "100");
+    auto parent_retrieved = parent.get("x");
+    EXPECT_EQ(parent_retrieved->get_num(), "100");
 }
 
 TEST(SymbolTableTest, TestErase) {
@@ -155,7 +241,8 @@ TEST(SymbolTableTest, TestErase) {
 
 // Interpreter and Parser Tests - Expanded
 
-void check_interpreter(std::string text, std::string expected_val, std::string expected_type = VALUE_INT) {
+void check_interpreter(std::string text, std::string expected_val,
+                       std::string expected_type = VALUE_INT) {
     Lexer lexer("test", text);
     TokenList tokens = lexer.make_tokens();
     Parser parser(tokens);
@@ -166,7 +253,7 @@ void check_interpreter(std::string text, std::string expected_val, std::string e
     Interpreter interpreter(st);
 
     std::shared_ptr<Value> result;
-    for(auto node : ast) {
+    for (auto node : ast) {
         result = interpreter.visit(node);
     }
 
@@ -226,7 +313,8 @@ TEST(InterpreterTest, TestControlFlowFor) {
     // for i <- 1 to 5 step 1 do s <- s + i
     // s starts 0. s becomes 1, 3, 6, 10, 15.
     // Returns {1, 3, 6, 10, 15}
-    check_interpreter("s <- 0; for i <- 1 to 5 step 1 do s <- s + i", "{1, 3, 6, 10, 15}", VALUE_ARRAY);
+    check_interpreter("s <- 0; for i <- 1 to 5 step 1 do s <- s + i", "{1, 3, 6, 10, 15}",
+                      VALUE_ARRAY);
 
     // Default step
     check_interpreter("s <- 0; for i <- 1 to 5 do s <- s + i", "{1, 3, 6, 10, 15}", VALUE_ARRAY);
@@ -325,13 +413,12 @@ TEST(InterpreterTest, TestAssignment) {
 
 TEST(ImportTest, TestImportDsaStack) {
     SymbolTable st;
-    std::string result = run(
-        "test/import_dsa.ps",
-        "import dsa\n"
-        "stack <- Stack()\n"
-        "stack.push(4)\n"
-        "result <- stack.pop()\n",
-        st);
+    std::string result = run("test/import_dsa.ps",
+                             "import dsa\n"
+                             "stack <- Stack()\n"
+                             "stack.push(4)\n"
+                             "result <- stack.pop()\n",
+                             st);
 
     EXPECT_EQ(result, "");
     std::shared_ptr<Value> imported_result = st.get("result");
@@ -341,23 +428,22 @@ TEST(ImportTest, TestImportDsaStack) {
 
 TEST(ImportTest, TestOptimizedDsaCollections) {
     SymbolTable st;
-    std::string result = run(
-        "test/import_dsa_optimized.ps",
-        "import dsa\n"
-        "queue <- Queue()\n"
-        "queue.enqueue(1)\n"
-        "queue.enqueue(2)\n"
-        "first <- queue.dequeue()\n"
-        "front <- queue.front()\n"
-        "list <- LinkedList()\n"
-        "list.append(2)\n"
-        "list.prepend(1)\n"
-        "list.append(3)\n"
-        "second <- list.get(2)\n"
-        "list.set(2, 20)\n"
-        "updated <- list.get(2)\n"
-        "popped <- list.pop_front()\n",
-        st);
+    std::string result = run("test/import_dsa_optimized.ps",
+                             "import dsa\n"
+                             "queue <- Queue()\n"
+                             "queue.enqueue(1)\n"
+                             "queue.enqueue(2)\n"
+                             "first <- queue.dequeue()\n"
+                             "front <- queue.front()\n"
+                             "list <- LinkedList()\n"
+                             "list.append(2)\n"
+                             "list.prepend(1)\n"
+                             "list.append(3)\n"
+                             "second <- list.get(2)\n"
+                             "list.set(2, 20)\n"
+                             "updated <- list.get(2)\n"
+                             "popped <- list.pop_front()\n",
+                             st);
 
     EXPECT_EQ(result, "");
     EXPECT_EQ(st.get("first")->get_num(), "1");
@@ -369,21 +455,20 @@ TEST(ImportTest, TestOptimizedDsaCollections) {
 
 TEST(ImportTest, TestDsaTree) {
     SymbolTable st;
-    std::string result = run(
-        "test/import_dsa_tree.ps",
-        "import dsa\n"
-        "tree <- Tree()\n"
-        "empty <- tree.is_empty()\n"
-        "tree.insert(5)\n"
-        "tree.insert(3)\n"
-        "tree.insert(7)\n"
-        "tree.insert(5)\n"
-        "has_three <- tree.contains(3)\n"
-        "missing <- tree.contains(4)\n"
-        "min_value <- tree.min()\n"
-        "max_value <- tree.max()\n"
-        "tree_size <- tree.size()\n",
-        st);
+    std::string result = run("test/import_dsa_tree.ps",
+                             "import dsa\n"
+                             "tree <- Tree()\n"
+                             "empty <- tree.is_empty()\n"
+                             "tree.insert(5)\n"
+                             "tree.insert(3)\n"
+                             "tree.insert(7)\n"
+                             "tree.insert(5)\n"
+                             "has_three <- tree.contains(3)\n"
+                             "missing <- tree.contains(4)\n"
+                             "min_value <- tree.min()\n"
+                             "max_value <- tree.max()\n"
+                             "tree_size <- tree.size()\n",
+                             st);
 
     EXPECT_EQ(result, "");
     EXPECT_EQ(st.get("empty")->get_num(), "1");
@@ -396,20 +481,19 @@ TEST(ImportTest, TestDsaTree) {
 
 TEST(ImportTest, TestDsaDsu) {
     SymbolTable st;
-    std::string result = run(
-        "test/import_dsa_dsu.ps",
-        "import dsa\n"
-        "dsu <- DSU()\n"
-        "dsu.make_set(1)\n"
-        "dsu.make_set(2)\n"
-        "dsu.make_set(3)\n"
-        "before <- dsu.connected(1, 3)\n"
-        "dsu.merge(1, 2)\n"
-        "dsu.merge(2, 3)\n"
-        "after <- dsu.connected(1, 3)\n"
-        "root <- dsu.find(3)\n"
-        "set_count <- dsu.size()\n",
-        st);
+    std::string result = run("test/import_dsa_dsu.ps",
+                             "import dsa\n"
+                             "dsu <- DSU()\n"
+                             "dsu.make_set(1)\n"
+                             "dsu.make_set(2)\n"
+                             "dsu.make_set(3)\n"
+                             "before <- dsu.connected(1, 3)\n"
+                             "dsu.merge(1, 2)\n"
+                             "dsu.merge(2, 3)\n"
+                             "after <- dsu.connected(1, 3)\n"
+                             "root <- dsu.find(3)\n"
+                             "set_count <- dsu.size()\n",
+                             st);
 
     EXPECT_EQ(result, "");
     EXPECT_EQ(st.get("before")->get_num(), "0");
@@ -428,24 +512,34 @@ TEST(ParserTest, TestMixedMemberIndexChain) {
         "box.items.push(Box())\n"
         "box.items[1].items <- {7}\n"
         "box.items[1].items[1]",
-        "7",
-        VALUE_INT);
+        "7", VALUE_INT);
+}
+
+TEST(InterpreterTest, LogicalOperatorsKeepPrecedenceAndShortCircuit) {
+    check_interpreter("1 + 2 * 3 = 7 and not false or false", "1");
+    check_interpreter("true or false and false", "0");
+    check_interpreter("true or missing", "1");
+    check_interpreter("false and missing", "0");
+}
+
+TEST(ParserTest, PreservesArrayDelimiterKinds) {
+    check_interpreter("{1 + 2, 3 * 4}[2]", "12");
+    check_interpreter("[1 + 2, 3 * 4][1]", "3");
 }
 
 TEST(InterpreterTest, TestBreakContinueAndShortCircuit) {
     SymbolTable st;
-    std::string result = run(
-        "test/control_flow.ps",
-        "sum <- 0\n"
-        "i <- 0\n"
-        "while i < 10 do\n"
-        "    i <- i + 1\n"
-        "    if i = 3 then continue\n"
-        "    if i = 6 then break\n"
-        "    sum <- sum + i\n"
-        "empty <- {}\n"
-        "guarded <- false and empty[1]\n",
-        st);
+    std::string result = run("test/control_flow.ps",
+                             "sum <- 0\n"
+                             "i <- 0\n"
+                             "while i < 10 do\n"
+                             "    i <- i + 1\n"
+                             "    if i = 3 then continue\n"
+                             "    if i = 6 then break\n"
+                             "    sum <- sum + i\n"
+                             "empty <- {}\n"
+                             "guarded <- false and empty[1]\n",
+                             st);
 
     EXPECT_EQ(result, "");
     EXPECT_EQ(st.get("sum")->get_num(), "12");
@@ -454,14 +548,13 @@ TEST(InterpreterTest, TestBreakContinueAndShortCircuit) {
 
 TEST(InterpreterTest, TestArrayInsertRemove) {
     SymbolTable st;
-    std::string result = run(
-        "test/array_insert_remove.ps",
-        "arr <- {1, 3}\n"
-        "arr.insert(2, 2)\n"
-        "removed <- arr.remove(1)\n"
-        "first <- arr[1]\n"
-        "second <- arr[2]\n",
-        st);
+    std::string result = run("test/array_insert_remove.ps",
+                             "arr <- {1, 3}\n"
+                             "arr.insert(2, 2)\n"
+                             "removed <- arr.remove(1)\n"
+                             "first <- arr[1]\n"
+                             "second <- arr[2]\n",
+                             st);
 
     EXPECT_EQ(result, "");
     EXPECT_EQ(st.get("removed")->get_num(), "1");
@@ -471,25 +564,24 @@ TEST(InterpreterTest, TestArrayInsertRemove) {
 
 TEST(ImportTest, TestOptimizedRbTree) {
     SymbolTable st;
-    std::string result = run(
-        "test/import_dsa_rbtree.ps",
-        "import dsa\n"
-        "tree <- RBTree()\n"
-        "tree.insert(10)\n"
-        "tree.insert(5)\n"
-        "tree.insert(15)\n"
-        "tree.insert(3)\n"
-        "tree.insert(7)\n"
-        "tree.insert(12)\n"
-        "tree.insert(18)\n"
-        "tree.insert(7)\n"
-        "has_seven <- tree.contains(7)\n"
-        "missing <- tree.contains(9)\n"
-        "min_value <- tree.min()\n"
-        "max_value <- tree.max()\n"
-        "tree_size <- tree.size()\n"
-        "root_color <- tree.root_color()\n",
-        st);
+    std::string result = run("test/import_dsa_rbtree.ps",
+                             "import dsa\n"
+                             "tree <- RBTree()\n"
+                             "tree.insert(10)\n"
+                             "tree.insert(5)\n"
+                             "tree.insert(15)\n"
+                             "tree.insert(3)\n"
+                             "tree.insert(7)\n"
+                             "tree.insert(12)\n"
+                             "tree.insert(18)\n"
+                             "tree.insert(7)\n"
+                             "has_seven <- tree.contains(7)\n"
+                             "missing <- tree.contains(9)\n"
+                             "min_value <- tree.min()\n"
+                             "max_value <- tree.max()\n"
+                             "tree_size <- tree.size()\n"
+                             "root_color <- tree.root_color()\n",
+                             st);
 
     EXPECT_EQ(result, "");
     EXPECT_EQ(st.get("has_seven")->get_num(), "1");
@@ -502,20 +594,19 @@ TEST(ImportTest, TestOptimizedRbTree) {
 
 TEST(ImportTest, TestOptimizedBTree) {
     SymbolTable st;
-    std::string result = run(
-        "test/import_dsa_btree.ps",
-        "import dsa\n"
-        "tree <- BTree(2)\n"
-        "for i <- 1 to 20 do\n"
-        "    tree.insert(i)\n"
-        "tree.insert(10)\n"
-        "has_fifteen <- tree.contains(15)\n"
-        "missing <- tree.contains(21)\n"
-        "min_value <- tree.min()\n"
-        "max_value <- tree.max()\n"
-        "tree_size <- tree.size()\n"
-        "tree_height <- tree.height()\n",
-        st);
+    std::string result = run("test/import_dsa_btree.ps",
+                             "import dsa\n"
+                             "tree <- BTree(2)\n"
+                             "for i <- 1 to 20 do\n"
+                             "    tree.insert(i)\n"
+                             "tree.insert(10)\n"
+                             "has_fifteen <- tree.contains(15)\n"
+                             "missing <- tree.contains(21)\n"
+                             "min_value <- tree.min()\n"
+                             "max_value <- tree.max()\n"
+                             "tree_size <- tree.size()\n"
+                             "tree_height <- tree.height()\n",
+                             st);
 
     EXPECT_EQ(result, "");
     EXPECT_EQ(st.get("has_fifteen")->get_num(), "1");
@@ -526,7 +617,7 @@ TEST(ImportTest, TestOptimizedBTree) {
     EXPECT_EQ(st.get("tree_height")->get_num(), "4");
 }
 
-int main(int argc, char *argv[]) {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+int main(int argc, char* argv[]) {
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }
