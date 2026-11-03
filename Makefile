@@ -2,7 +2,7 @@ VPATH = src
 CC = g++
 CPPFLAGS = -std=c++17 -O2
 TARGET = pseudo
-SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/symboltable.cpp src/jit.cpp src/interpreter.cpp src/pseudo.cpp src/shell.cpp src/error.cpp
+SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/symboltable.cpp src/jit.cpp src/interpreter.cpp src/pseudo.cpp src/shell.cpp src/error.cpp src/complexity.cpp src/profile.cpp src/analysis_cli.cpp
 LSP_TARGET = pseudo-lsp
 LSP_SRCS = src/color.cpp src/position.cpp src/token.cpp src/node.cpp src/parser.cpp src/lexer.cpp src/lsp.cpp
 BUILD_DIR = build
@@ -19,6 +19,8 @@ BUILD_COV_DIR = build_cov
 # Test objects (exclude shell.o which contains main)
 TEST_OBJS = $(filter-out $(BUILD_COV_DIR)/shell.o, $(SRCS:src/%.cpp=$(BUILD_COV_DIR)/%.o))
 TEST_TARGET = run_tests
+TEST_SRCS = test/unittest.cpp test/hash_table_test.cpp test/complexity_test.cpp test/profile_test.cpp
+TEST_SUITE_OBJS = $(TEST_SRCS:test/%.cpp=$(BUILD_DIR)/%.o)
 
 $(TARGET): $(BUILD_DIR) $(OBJS)
 	$(CC) $(CPPFLAGS) $(OBJS) -o $(TARGET)
@@ -84,14 +86,20 @@ GTEST_HEADERS = $(GTEST_DIR)/include/gtest/*.h \
 $(BUILD_DIR)/gtest-all.o: $(GTEST_DIR)/src/gtest-all.cc $(GTEST_HEADERS) | $(BUILD_DIR)
 	$(CC) $(TEST_CPPFLAGS) -I$(GTEST_DIR) -c $(GTEST_DIR)/src/gtest-all.cc -o $@
 
-$(BUILD_DIR)/unittest.o: test/unittest.cpp $(GTEST_HEADERS) | $(BUILD_DIR)
+$(BUILD_DIR)/%_test.o: test/%_test.cpp $(GTEST_HEADERS) $(HEADERS) | $(BUILD_DIR)
+	$(CC) $(TEST_CPPFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/unittest.o: test/unittest.cpp $(GTEST_HEADERS) $(HEADERS) | $(BUILD_DIR)
 	$(CC) $(TEST_CPPFLAGS) -c test/unittest.cpp -o $@
 
-$(TEST_TARGET): $(BUILD_COV_DIR) $(TEST_OBJS) $(BUILD_DIR)/gtest-all.o $(BUILD_DIR)/unittest.o
-	$(CC) $(TEST_CPPFLAGS) $(TEST_OBJS) $(BUILD_DIR)/gtest-all.o $(BUILD_DIR)/unittest.o -o $@
+$(TEST_TARGET): $(BUILD_COV_DIR) $(TEST_OBJS) $(BUILD_DIR)/gtest-all.o $(TEST_SUITE_OBJS)
+	$(CC) $(TEST_CPPFLAGS) $(TEST_OBJS) $(BUILD_DIR)/gtest-all.o $(TEST_SUITE_OBJS) -o $@
 
 test: $(TEST_TARGET)
 	./$(TEST_TARGET)
+
+test-analysis: $(TARGET)
+	bash test/analysis_tests.sh
 
 coverage: test
 	gcov -r -o $(BUILD_COV_DIR) $(filter-out src/shell.cpp, $(SRCS))
@@ -99,7 +107,7 @@ coverage: test
 test-compiler: $(TARGET)
 	bash test/compiler_tests.sh
 
-.PHONY: clean all test coverage lsp test-compiler runtime compiler
+.PHONY: clean all test test-analysis coverage lsp test-compiler runtime compiler
 lsp: $(LSP_TARGET)
 
 clean:

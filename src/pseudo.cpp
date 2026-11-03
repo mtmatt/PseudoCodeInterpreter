@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -30,6 +31,7 @@
 #include "lexer.h"
 #include "node.h"
 #include "parser.h"
+#include "profile.h"
 #include "token.h"
 #include "value.h"
 
@@ -280,10 +282,17 @@ std::shared_ptr<Value> BaseAlgoValue::set_args(const NodeList& args, SymbolTable
             VALUE_ERROR, Color(0xFF, 0x39, 0x6E).get() + "Too many arguments" RESET);
     }
 
+    // Evaluate left to right before binding parameters, so one parameter cannot
+    // shadow a caller variable used by a later argument.
+    ValueList evaluated_args;
+    evaluated_args.reserve(args.size());
     for (int i = 0; i < args.size(); ++i) {
         std::shared_ptr<Value> v = interpreter.visit(args[i]);
         if (v->get_type() == VALUE_ERROR) return v;
-        sym.set(arg_names[i], v);
+        evaluated_args.push_back(v);
+    }
+    for (int i = 0; i < evaluated_args.size(); ++i) {
+        sym.set(arg_names[i], evaluated_args[i]);
     }
     static std::shared_ptr<Value> none = std::make_shared<Value>();
     return none;
@@ -293,20 +302,32 @@ class ScopeCleaner {
    public:
     ScopeCleaner(SymbolTable& _sym) : sym(_sym) {}
     ~ScopeCleaner() {
+        // An aborted profile must not execute more user code during unwinding.
+        if (profile_active() && std::uncaught_exceptions() > 0) return;
         if (!sym.has_instances()) {
             return;
         }
-        for (auto const& [name, val] : sym.get_symbols()) {
-            if (val->get_type() == VALUE_INSTANCE) {
-                if (val.use_count() == 1) {
-                    InstanceValue* inst = dynamic_cast<InstanceValue*>(val.get());
-                    std::shared_ptr<Value> self_ptr = val;
-                    std::shared_ptr<Value> dtor = inst->get_member("destructor", self_ptr);
-                    if (dtor->get_type() == VALUE_ALGO) {
-                        dtor->execute({}, sym.get_parent());
+        try {
+            for (auto const& [name, val] : sym.get_symbols()) {
+                if (val->get_type() == VALUE_INSTANCE) {
+                    if (val.use_count() == 1) {
+                        InstanceValue* inst = dynamic_cast<InstanceValue*>(val.get());
+                        std::shared_ptr<Value> self_ptr = val;
+                        std::shared_ptr<Value> dtor = inst->get_member("destructor", self_ptr);
+                        if (dtor->get_type() == VALUE_ALGO) {
+                            auto result = dtor->execute({}, sym.get_parent());
+                            if (profile_active() && result->get_type() == VALUE_ERROR) {
+                                throw std::runtime_error(result->get_num());
+                            }
+                        }
                     }
                 }
             }
+        } catch (...) {
+            // Preserve the failure until a normal evaluation or final session check;
+            // throwing through this noexcept destructor would terminate the process.
+            if (!profile_active()) std::terminate();
+            profile_defer_exception(std::current_exception());
         }
     }
 
@@ -450,6 +471,7 @@ std::string numeric_cache_key(const ValueList& values) {
 }  // namespace
 
 std::shared_ptr<Value> AlgoValue::execute(const NodeList& args, SymbolTable* parent) {
+    ProfileCall profile_call;
     static std::unordered_map<std::size_t, bool> memoizable_by_node;
     static std::unordered_map<std::size_t, std::unordered_map<std::string, std::shared_ptr<Value>>>
         memoized_results;
@@ -461,14 +483,14 @@ std::shared_ptr<Value> AlgoValue::execute(const NodeList& args, SymbolTable* par
     Interpreter interpreter(sym);
     std::size_t node_id = value->get_id();
     auto memoizable_found = memoizable_by_node.find(node_id);
-    if (memoizable_found == memoizable_by_node.end()) {
+    if (!profile_active() && memoizable_found == memoizable_by_node.end()) {
         memoizable_found =
             memoizable_by_node
                 .emplace(node_id, is_memoizable_numeric_algo(value, algo_name, arg_names))
                 .first;
     }
 
-    if (memoizable_found->second) {
+    if (!profile_active() && memoizable_found->second) {
         if (args.size() < arg_names.size()) {
             return std::make_shared<ErrorValue>(
                 VALUE_ERROR, Color(0xFF, 0x39, 0x6E).get() + "Too few arguments" RESET);
@@ -520,7 +542,7 @@ std::shared_ptr<Value> AlgoValue::execute(const NodeList& args, SymbolTable* par
     std::shared_ptr<Value> ret{set_args(args, sym, interpreter)};
     if (ret->get_type() == VALUE_ERROR) return ret;
 
-    if (!single_return_jit_disabled.count(node_id)) {
+    if (!profile_active() && !single_return_jit_disabled.count(node_id)) {
         auto compiled = single_return_jit.find(node_id);
         if (compiled == single_return_jit.end()) {
             std::shared_ptr<Node> return_expr =
@@ -549,6 +571,7 @@ std::shared_ptr<Value> AlgoValue::execute(const NodeList& args, SymbolTable* par
 
     for (int i = 0; i < algo_body.size(); ++i) {
         ret = interpreter.visit(algo_body[i]);
+        if (ret->get_type() == VALUE_ERROR) return ret;
         if (ret->get_type() == VALUE_RETURN) {
             return dynamic_cast<ReturnValue*>(ret.get())->get_value();
         }
@@ -771,6 +794,7 @@ std::shared_ptr<Value> BoundMethodValue::execute(const NodeList& args, SymbolTab
                 return method->execute(args, &sym);
             }
 
+            ProfileCall profile_call;
             SymbolTable sym(parent);
             ScopeCleaner cleaner(sym);
             Interpreter interpreter(sym);

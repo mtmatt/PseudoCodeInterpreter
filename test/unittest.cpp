@@ -527,6 +527,20 @@ TEST(ParserTest, PreservesArrayDelimiterKinds) {
     check_interpreter("[1 + 2, 3 * 4][1]", "3");
 }
 
+TEST(ParserTest, AllowsBuiltinNamesForUserMethods) {
+    check_interpreter(
+        "Struct Box:\n"
+        "    value\n"
+        "    Algorithm Box constructor(): self.value <- 9\n"
+        "    Algorithm clear(): self.value <- 0\n"
+        "    Algorithm Box read(): return self.value\n"
+        "Algorithm Box::print(): return self.value + 1\n"
+        "box <- Box()\n"
+        "box.clear()\n"
+        "box.read() + box.print()",
+        "1");
+}
+
 TEST(InterpreterTest, TestBreakContinueAndShortCircuit) {
     SymbolTable st;
     std::string result = run("test/control_flow.ps",

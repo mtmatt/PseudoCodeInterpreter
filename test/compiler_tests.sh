@@ -25,6 +25,7 @@ FILES=(
     "$ROOT/test/test_array_methods.ps"
     "$ROOT/test/test_string_index.ps"
     "$ROOT/test/test_struct.ps"
+    "$ROOT/example/hash_tables.ps"
 )
 
 failures=0

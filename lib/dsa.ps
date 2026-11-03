@@ -148,6 +148,255 @@ Struct Queue:
         self.head <- 1
         return none
 
+// Educational hash tables use signed integer keys and arbitrary values.
+// Capacities must be integers; nonpositive capacities are normalized to 1.
+// A remainder is adjusted only when negative, avoiding abs(minimum_integer).
+// Missing get/remove return none. Use contains to distinguish a missing key
+// from a stored none, false, or zero (these literals all have value 0).
+
+// Fixed linear probing: expected O(1) at low used-slot occupancy (live plus
+// deleted slots) with well-distributed hashes; worst O(capacity) per operation.
+// clear and construction take O(capacity); size/capacity/load_factor are O(1).
+// A full table rejects a NEW key with false; updating an existing key works.
+Struct LinearProbingHashTable:
+    slot_keys
+    slot_values
+    slot_states
+    slot_count
+    entry_count
+    deleted_count
+
+    Algorithm LinearProbingHashTable constructor(capacity):
+        if capacity < 1 then capacity <- 1
+        self.slot_count <- capacity
+        self.clear()
+
+    Algorithm bucket_index(key):
+        remainder <- key % self.slot_count
+        if remainder < 0 then remainder <- remainder + self.slot_count
+        return remainder + 1
+
+    // State 0 is empty, 1 is occupied, and 2 is a deleted slot (tombstone).
+    // Tombstones preserve the probe path to keys placed after a collision.
+    Algorithm find_index(key):
+        index <- self.bucket_index(key)
+        for probes <- 1 to self.slot_count do
+            if self.slot_states[index] = 0 then return 0
+            if self.slot_states[index] = 1 then
+                if self.slot_keys[index] = key then return index
+            index <- index % self.slot_count + 1
+        return 0
+
+    // Internal helper; callers have already found an unoccupied slot.
+    Algorithm fill_slot(index, key, value):
+        if self.slot_states[index] = 2 then
+            self.deleted_count <- self.deleted_count - 1
+        self.slot_keys[index] <- key
+        self.slot_values[index] <- value
+        self.slot_states[index] <- 1
+        self.entry_count <- self.entry_count + 1
+        return value
+
+    Algorithm set(key, value):
+        index <- self.bucket_index(key)
+        first_deleted <- 0
+        for probes <- 1 to self.slot_count do
+            if self.slot_states[index] = 1 then
+                if self.slot_keys[index] = key then
+                    self.slot_values[index] <- value
+                    return value
+            if self.slot_states[index] = 2 then
+                if first_deleted = 0 then first_deleted <- index
+            if self.slot_states[index] = 0 then
+                if first_deleted != 0 then index <- first_deleted
+                return self.fill_slot(index, key, value)
+            index <- index % self.slot_count + 1
+        // Search past a tombstone before reusing it: the key may exist later.
+        if first_deleted != 0 then return self.fill_slot(first_deleted, key, value)
+        return false
+
+    Algorithm get(key):
+        index <- self.find_index(key)
+        if index = 0 then return none
+        return self.slot_values[index]
+
+    Algorithm contains(key):
+        return self.find_index(key) != 0
+
+    Algorithm remove(key):
+        index <- self.find_index(key)
+        if index = 0 then return none
+        value <- self.slot_values[index]
+        self.slot_states[index] <- 2
+        self.slot_keys[index] <- none
+        self.slot_values[index] <- none
+        self.entry_count <- self.entry_count - 1
+        self.deleted_count <- self.deleted_count + 1
+        return value
+
+    Algorithm size():
+        return self.entry_count
+
+    Algorithm is_empty():
+        return self.entry_count = 0
+
+    Algorithm capacity():
+        return self.slot_count
+
+    Algorithm load_factor():
+        return float(self.entry_count) / self.slot_count
+
+    Algorithm clear():
+        self.slot_keys <- {}
+        self.slot_values <- {}
+        self.slot_states <- {}
+        for index <- 1 to self.slot_count do
+            self.slot_keys.push(none)
+            self.slot_values.push(none)
+            self.slot_states.push(0)
+        self.entry_count <- 0
+        self.deleted_count <- 0
+        return none
+
+// Each bucket holds a chain of entries. With n entries and b buckets,
+// expected set/get/contains/remove cost O(1 + n/b) under uniform hashing;
+// worst O(n) when all keys collide. No full-table rejection is necessary.
+// Construction takes O(b), clear takes O(n + b), and metadata methods O(1).
+Struct DsaHashEntry:
+    key
+    value
+
+    Algorithm DsaHashEntry constructor(key, value):
+        self.key <- key
+        self.value <- value
+
+Struct ChainedHashTable:
+    buckets
+    bucket_count
+    entry_count
+
+    Algorithm ChainedHashTable constructor(bucket_count):
+        if bucket_count < 1 then bucket_count <- 1
+        self.bucket_count <- bucket_count
+        self.clear()
+
+    Algorithm bucket_index(key):
+        remainder <- key % self.bucket_count
+        if remainder < 0 then remainder <- remainder + self.bucket_count
+        return remainder + 1
+
+    Algorithm set(key, value):
+        bucket <- self.buckets[self.bucket_index(key)]
+        for index <- 1 to bucket.size() do
+            if bucket[index].key = key then
+                bucket[index].value <- value
+                return value
+        bucket.push(DsaHashEntry(key, value))
+        self.entry_count <- self.entry_count + 1
+        return value
+
+    Algorithm get(key):
+        bucket <- self.buckets[self.bucket_index(key)]
+        for index <- 1 to bucket.size() do
+            if bucket[index].key = key then return bucket[index].value
+        return none
+
+    Algorithm contains(key):
+        bucket <- self.buckets[self.bucket_index(key)]
+        for index <- 1 to bucket.size() do
+            if bucket[index].key = key then return true
+        return false
+
+    Algorithm remove(key):
+        bucket <- self.buckets[self.bucket_index(key)]
+        for index <- 1 to bucket.size() do
+            if bucket[index].key = key then
+                value <- bucket[index].value
+                // Chain order is irrelevant, so avoid shifting the tail.
+                bucket[index] <- bucket[bucket.size()]
+                bucket.pop()
+                self.entry_count <- self.entry_count - 1
+                return value
+        return none
+
+    Algorithm size():
+        return self.entry_count
+
+    Algorithm is_empty():
+        return self.entry_count = 0
+
+    // For separate chaining, capacity is the number of buckets, not a limit.
+    Algorithm capacity():
+        return self.bucket_count
+
+    Algorithm load_factor():
+        return float(self.entry_count) / self.bucket_count
+
+    Algorithm clear():
+        self.buckets <- {}
+        for index <- 1 to self.bucket_count do
+            self.buckets.push({})
+        self.entry_count <- 0
+        return none
+
+// Dynamic probing doubles before live load exceeds 1/2. A rebuild removes
+// tombstones after capacity/4 deletions, keeping used-slot load below ~3/4.
+// Under well-distributed hashes, get/contains are expected O(1), and
+// set/remove are expected amortized O(1), including rebuilds. Non-rebuilding
+// operations take O(capacity) in the worst case. A rebuild takes expected
+// O(capacity), but O(n^2 + capacity) under adversarial collisions.
+// Space is O(capacity). There is no automatic shrinking.
+// clear retains capacity and takes O(capacity); metadata methods take O(1).
+Struct DynamicHashTable:
+    storage
+
+    Algorithm DynamicHashTable constructor(initial_capacity):
+        self.storage <- LinearProbingHashTable(initial_capacity)
+
+    // Internal helper: new_capacity must leave enough room for every entry.
+    Algorithm rebuild(new_capacity):
+        old_storage <- self.storage
+        self.storage <- LinearProbingHashTable(new_capacity)
+        for index <- 1 to old_storage.capacity() do
+            if old_storage.slot_states[index] = 1 then
+                self.storage.set(old_storage.slot_keys[index], old_storage.slot_values[index])
+        return none
+
+    Algorithm set(key, value):
+        if self.storage.contains(key) then return self.storage.set(key, value)
+        if (self.storage.size() + 1) * 2 > self.storage.capacity() then
+            self.rebuild(self.storage.capacity() * 2)
+        return self.storage.set(key, value)
+
+    Algorithm get(key):
+        return self.storage.get(key)
+
+    Algorithm contains(key):
+        return self.storage.contains(key)
+
+    Algorithm remove(key):
+        old_size <- self.storage.size()
+        value <- self.storage.remove(key)
+        if self.storage.size() != old_size then
+            if self.storage.deleted_count * 4 >= self.storage.capacity() then
+                self.rebuild(self.storage.capacity())
+        return value
+
+    Algorithm size():
+        return self.storage.size()
+
+    Algorithm is_empty():
+        return self.storage.is_empty()
+
+    Algorithm capacity():
+        return self.storage.capacity()
+
+    Algorithm load_factor():
+        return self.storage.load_factor()
+
+    Algorithm clear():
+        return self.storage.clear()
+
 Struct Tree:
     keys
 

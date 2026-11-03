@@ -19,6 +19,7 @@
 
 #include "jit.h"
 #include "node.h"
+#include "profile.h"
 #include "token.h"
 #include "value.h"
 
@@ -56,6 +57,7 @@ bool has_assignment_node(const std::shared_ptr<Node>& node) {
 }  // namespace
 
 std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
+    profile_record_node();
     if (std::optional<std::shared_ptr<Value>> jit_result = try_visit_jit(node)) {
         return *jit_result;
     }
@@ -108,6 +110,7 @@ std::shared_ptr<Value> Interpreter::visit(std::shared_ptr<Node> node) {
 
 std::optional<std::shared_ptr<Value>> Interpreter::try_visit_jit(
     const std::shared_ptr<Node>& node) {
+    if (profile_active()) return std::nullopt;
     static std::unordered_map<std::size_t, JitCacheEntry> jit_cache;
 
     if (!is_jit_root(node)) {
@@ -159,7 +162,8 @@ std::shared_ptr<Value> Interpreter::visit_var_access(std::shared_ptr<Node> node)
 std::shared_ptr<Value> Interpreter::visit_var_assign(std::shared_ptr<Node> node) {
     NodeList child = node->get_child();
     std::string var_name = node->get_name();
-    if (child[0]->get_type() == NODE_BINOP && child[0]->get_tok()->get_type() == TOKEN_ADD) {
+    if (!profile_active() && child[0]->get_type() == NODE_BINOP &&
+        child[0]->get_tok()->get_type() == TOKEN_ADD) {
         NodeList add_child = child[0]->get_child();
         if (add_child[0]->get_type() == NODE_VARACCESS && add_child[0]->get_name() == var_name) {
             std::shared_ptr<Value> current = symbol_table.get(var_name);
@@ -214,14 +218,19 @@ std::shared_ptr<Value> Interpreter::visit_array(std::shared_ptr<Node> node) {
     NodeList child = node->get_child();
     ValueList array_value;
     for (int i{0}; i < child.size(); ++i) {
-        array_value.push_back(visit(child[i]));
+        auto value = visit(child[i]);
+        if (value->get_type() == VALUE_ERROR) return value;
+        array_value.push_back(value);
     }
     return std::make_shared<ArrayValue>(array_value);
 }
 
 std::shared_ptr<Value>& Interpreter::visit_array_access(std::shared_ptr<Node> node) {
     NodeList child{node->get_child()};
-    std::shared_ptr<Value> arr{visit(child[0])}, index{visit(child[1])};
+    std::shared_ptr<Value> arr{visit(child[0])};
+    if (arr->get_type() == VALUE_ERROR) return error = arr;
+    std::shared_ptr<Value> index{visit(child[1])};
+    if (index->get_type() == VALUE_ERROR) return error = index;
     if (arr->get_type() == VALUE_STRING) {
         std::string str = arr->as_string();
         int p = index->as_int();
@@ -260,6 +269,7 @@ std::shared_ptr<Value> Interpreter::visit_array_assign(std::shared_ptr<Node> nod
         std::shared_ptr<Node> member_node = child[0]->get_child()[1];
 
         std::shared_ptr<Value> obj = visit(obj_node);
+        if (obj->get_type() == VALUE_ERROR) return obj;
         if (obj->get_type() == VALUE_INSTANCE) {
             InstanceValue* inst = dynamic_cast<InstanceValue*>(obj.get());
             std::shared_ptr<Value> val = visit(child[1]);
@@ -276,6 +286,7 @@ std::shared_ptr<Value> Interpreter::visit_array_assign(std::shared_ptr<Node> nod
     }
     NodeList access_child{child[0]->get_child()};
     std::shared_ptr<Value> obj{visit(access_child[0])};
+    if (obj->get_type() == VALUE_ERROR) return obj;
     if (obj->get_type() == VALUE_HASH_TABLE) {
         std::shared_ptr<Value> key{visit(access_child[1])};
         if (key->get_type() == VALUE_ERROR) return key;
@@ -283,13 +294,28 @@ std::shared_ptr<Value> Interpreter::visit_array_assign(std::shared_ptr<Node> nod
         if (value->get_type() == VALUE_ERROR) return value;
         return dynamic_cast<HashTableValue*>(obj.get())->set(key, value);
     }
-    std::shared_ptr<Value>&arr{visit_array_access(child[0])}, value{visit(child[1])};
-    return arr = value;
+    if (obj->get_type() != VALUE_ARRAY) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR,
+                                           "Indexed assignment requires an array or hash table\n");
+    }
+    auto index = visit(access_child[1]);
+    if (index->get_type() == VALUE_ERROR) return index;
+    auto* array = dynamic_cast<ArrayValue*>(obj.get());
+    int position = index->as_int();
+    auto current = array->operator[](position);
+    if (current->get_type() == VALUE_ERROR) return current;
+    auto value = visit(child[1]);
+    if (value->get_type() == VALUE_ERROR) return value;
+    // The RHS can resize the array. Resolve the slot again after evaluating it.
+    auto& target = array->operator[](position);
+    if (target->get_type() == VALUE_ERROR) return target;
+    return target = value;
 }
 
 std::shared_ptr<Value> Interpreter::visit_member_access(std::shared_ptr<Node> node) {
     NodeList child{node->get_child()};
     std::shared_ptr<Value> obj{visit(child[0])};
+    if (obj->get_type() == VALUE_ERROR) return obj;
     std::shared_ptr<Node>& member{child[1]};
 
     if (obj->get_type() == VALUE_ARRAY || obj->get_type() == VALUE_STRING ||
@@ -374,7 +400,7 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
     std::vector<std::string> fast_call_arg_names;
     std::vector<JitProgram> fast_call_arg_programs;
     std::optional<JitProgram> fast_call_body_program;
-    if (!collect_loop_results && child.size() == 4) {
+    if (!profile_active() && !collect_loop_results && child.size() == 4) {
         if (child[3]->get_type() == NODE_VARASSIGN) {
             NodeList assign_child = child[3]->get_child();
             fast_assign_name = child[3]->get_name();
@@ -435,6 +461,7 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
 
     ValueList ret;
     while (condition(i, end_value)) {
+        profile_record_loop();
         if (fast_assign_program) {
             std::optional<std::shared_ptr<Value>> val = fast_assign_program->execute(symbol_table);
             if (!val) {
@@ -450,26 +477,26 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
                 symbol_table.set(fast_assign_name, *val);
             }
         } else if (fast_call_body_program) {
-            ValueList saved_values;
-            std::vector<bool> had_saved_values;
+            SymbolTable call_scope(&symbol_table);
+            ValueList evaluated_args;
             bool failed = false;
             for (int arg_index = 0; arg_index < fast_call_arg_programs.size(); ++arg_index) {
                 std::optional<std::shared_ptr<Value>> arg =
-                    fast_call_arg_programs[arg_index].execute(symbol_table);
+                    fast_call_arg_programs[arg_index].execute(call_scope);
                 if (!arg || (*arg)->get_type() == VALUE_ERROR) {
                     if (arg && (*arg)->get_type() == VALUE_ERROR) return *arg;
                     failed = true;
                     break;
                 }
-                const std::string& arg_name = fast_call_arg_names[arg_index];
-                had_saved_values.push_back(symbol_table.contains_local(arg_name));
-                saved_values.push_back(symbol_table.get_local(arg_name));
-                symbol_table.set(arg_name, *arg);
+                evaluated_args.push_back(*arg);
             }
 
             if (!failed) {
+                for (int arg_index = 0; arg_index < evaluated_args.size(); ++arg_index) {
+                    call_scope.set(fast_call_arg_names[arg_index], evaluated_args[arg_index]);
+                }
                 std::optional<std::shared_ptr<Value>> val =
-                    fast_call_body_program->execute(symbol_table);
+                    fast_call_body_program->execute(call_scope);
                 if (!val) {
                     failed = true;
                 } else if ((*val)->get_type() == VALUE_ERROR ||
@@ -481,15 +508,6 @@ std::shared_ptr<Value> Interpreter::visit_for(std::shared_ptr<Node> node) {
                     goto next_for_iteration;
                 } else {
                     symbol_table.set(fast_call_assign_name, *val);
-                }
-            }
-
-            for (int arg_index = static_cast<int>(had_saved_values.size()) - 1; arg_index >= 0;
-                 --arg_index) {
-                if (had_saved_values[arg_index]) {
-                    symbol_table.set(fast_call_arg_names[arg_index], saved_values[arg_index]);
-                } else {
-                    symbol_table.erase(fast_call_arg_names[arg_index]);
                 }
             }
 
@@ -554,6 +572,7 @@ std::shared_ptr<Value> Interpreter::visit_while(std::shared_ptr<Node> node) {
     NodeList child = node->get_child();
     ValueList ret;
     while (visit(child[0])->as_int() == 1) {
+        profile_record_loop();
         if (child.size() == 2) {
             std::shared_ptr<Value> val = visit(child[1]);
             if (val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) return val;
@@ -592,6 +611,7 @@ std::shared_ptr<Value> Interpreter::visit_repeat(std::shared_ptr<Node> node) {
     NodeList child = node->get_child();
     ValueList ret;
     do {
+        profile_record_loop();
         if (child.size() == 2) {
             std::shared_ptr<Value> val = visit(child[1]);
             if (val->get_type() == VALUE_ERROR || val->get_type() == VALUE_RETURN) return val;
@@ -663,11 +683,16 @@ std::shared_ptr<Value> Interpreter::visit_algo_call(std::shared_ptr<Node> node) 
         algo = symbol_table.get(algo_call_node->get_name());
     else
         algo = visit(algo_node);
+    if (algo->get_type() == VALUE_ERROR) return algo;
+    if (algo->get_type() != VALUE_ALGO && algo->get_type() != VALUE_STRUCT) {
+        return std::make_shared<ErrorValue>(VALUE_ERROR, "Value is not callable\n");
+    }
     return algo->execute(algo_call_node->get_args(), &symbol_table);
 }
 
 std::optional<std::shared_ptr<Value>> Interpreter::try_visit_array_method_call(
     const std::shared_ptr<Node>& node) {
+    if (profile_active()) return std::nullopt;
     AlgorithmCallNode* algo_call_node = dynamic_cast<AlgorithmCallNode*>(node.get());
     if (!algo_call_node) {
         return std::nullopt;

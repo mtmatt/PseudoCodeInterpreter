@@ -1,0 +1,31 @@
+// Run with: ./pseudo --analyze --profile example/complexity.ps --sizes 4,8,12
+// The profiler supplies n. Each run receives a fresh global symbol table.
+
+Algorithm Linear(n):
+    total <- 0
+    for i <- 1 to n do
+        total <- total + i
+    return total
+
+Algorithm Quadratic(n):
+    total <- 0
+    for i <- 1 to n do
+        for j <- 1 to n do
+            total <- total + 1
+    return total
+
+Algorithm Halving(n):
+    steps <- 0
+    k <- n
+    while k > 1 do
+        k <- k / 2
+        steps <- steps + 1
+    return steps
+
+Algorithm Exp(n):
+    if n = 0 then
+        return 1
+    else
+        return Exp(n - 1) + Exp(n - 1)
+
+print(Linear(n), Quadratic(n), Halving(n), Exp(n))

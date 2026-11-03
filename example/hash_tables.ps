@@ -1,0 +1,44 @@
+import dsa
+
+// These educational tables accept signed integer keys. Native HashTable()
+// remains available for general keys, including strings.
+
+// Keys 4, 9, and 14 collide modulo 5 and wrap from slot 5 to slots 1 and 2.
+linear <- LinearProbingHashTable(5)
+linear.set(4, "four")
+linear.set(9, "nine")
+linear.set(14, "fourteen")
+linear.remove(9)
+print(linear.get(14))
+linear.set(19, "reuses the tombstone")
+print(linear.get(19))
+linear.set(-1, "negative key")
+linear.set(0, "zero key")
+print(linear.size())
+print(linear.set(24, "table is full"))
+print(linear.contains(24))
+// A full table still permits updates. set returns the stored value.
+print(linear.set(14, "updated"))
+
+// Chaining keeps all colliding keys in one bucket and has no fixed limit.
+chained <- ChainedHashTable(2)
+chained.set(0, "zero")
+chained.set(2, "two")
+chained.set(-2, "minus two")
+chained.remove(2)
+print(chained.get(-2))
+print(chained.load_factor())
+
+// Dynamic probing grows before load exceeds 1/2 and rehashes existing keys.
+dynamic <- DynamicHashTable(2)
+for key <- -3 to 3 do
+    dynamic.set(key, key * key)
+print(dynamic.size())
+print(dynamic.capacity())
+print(dynamic.get(-3))
+dynamic.set(0, none)
+// get returns none for both this stored value and a miss; contains separates them.
+print(dynamic.contains(0))
+print(dynamic.contains(99))
+dynamic.clear()
+print(dynamic.is_empty())

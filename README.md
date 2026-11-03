@@ -37,12 +37,15 @@ Current limitations:
 ## Data Types
 
 ### Integer
+
 - A standard 64-bit integer.
 
 ### Float
+
 - A standard 64-bit floating-point number.
 
 ### String
+
 - `"This is a string"`: Strings are wrapped in double quotation marks.
 - `"\""`: Escaped double quote (`"`).
 - `"\n"`: Newline.
@@ -50,6 +53,7 @@ Current limitations:
 - `"\\"`: Escaped backslash (`\`).
 
 ### Array
+
 - **Initialization**: `arr <- {1, 2, 3}`
 - Arrays are **1-indexed**.
 - Elements of different data types can be stored in the same array.
@@ -89,6 +93,26 @@ The `dsa` library provides data-structure types:
 - `RBTree`: red-black tree with `insert`, `contains`, `min`, `max`, `size`, `is_empty`, `root_color`
 - `BTree`: degree adjustable B-tree with `insert`, `contains`, `min`, `max`, `size`, `is_empty`, `height`
 - `DSU`: `make_set`, `find`, `merge`, `connected`, `size`
+- `LinearProbingHashTable(capacity)`: fixed capacity with linear probing and deletion tombstones
+- `ChainedHashTable(bucket_count)`: separate chaining with an array of entries in each bucket
+- `DynamicHashTable(initial_capacity)`: linear probing with automatic growth and tombstone cleanup
+
+The three educational hash tables are implemented in `lib/dsa.ps` and accept signed
+integer keys and arbitrary values. They share `set`, `get`, `contains`, `remove`,
+`size`, `is_empty`, `capacity`, `load_factor`, and `clear`. Nonpositive integer
+capacities become 1. `set` returns the stored value; a new insertion into a full
+fixed table returns `false`. `get` and `remove` return `none` for missing keys.
+Use `contains` to distinguish a missing key from a stored zero or `none`.
+`clear` keeps the capacity.
+
+With a well-distributed hash and a controlled load factor, probing operations take
+expected O(1) time. Fixed-table probing has O(capacity) worst-case cost; chaining
+has expected O(1 + entries / buckets) and O(entries) worst-case cost. The dynamic
+table grows before exceeding a 1/2 load factor and periodically removes tombstones;
+its updates are expected amortized O(1), with occasional rebuilds. Adversarial
+collisions can make individual operations linear and a rebuild quadratic in the
+number of entries. The source comments explain each strategy. The existing native
+`HashTable()` remains available. See `example/hash_tables.ps` for a comparison.
 
 ```pseudo
 import dsa
@@ -97,6 +121,50 @@ stack <- Stack()
 stack.push(10)
 print(stack.pop())
 ```
+
+## Complexity Analysis
+
+Build with `make`, then inspect a `.ps` program without executing it:
+
+```sh
+./pseudo --analyze example/complexity.ps
+```
+
+The static report estimates time complexity for the program and its algorithms.
+It explains recognized loop patterns and uses `unknown` when it cannot establish
+a bound, including unsupported recursion or dynamic calls. Estimates use a
+unit-cost model and are conditional on the assumptions printed in the report;
+they do not prove termination or measure memory usage. Imports are expanded using
+the normal module resolver. Error line numbers refer to the expanded source.
+
+To measure a program's execution, use `--profile`. Add `--sizes` to repeat with a
+fresh global integer `n` and fresh program state for each input size:
+
+```sh
+./pseudo --profile program.ps
+./pseudo --analyze --profile example/complexity.ps --sizes 4,8,12
+./pseudo --profile program.ps --sizes 100,200,400 --input count --max-steps 5000000
+```
+
+The program should use the injected variable to build its input and should not
+overwrite it. `--input` changes its name from `n`. Ordinary `read()` and
+`read_line()` still consume standard input on every run. Profiling executes the
+program, including its I/O; static analysis alone does not execute it.
+
+Reports go to stderr and program output stays on stdout. Runtime reports include
+AST evaluations, loop iterations, user algorithm calls, maximum call depth,
+elapsed milliseconds, and the ratio of evaluation counts between adjacent runs.
+JIT shortcuts and automatic memoization are disabled while profiling, making
+source-level work visible. Built-in array, string, and native `HashTable` internals
+are not counted; these are AST counts, not CPU instruction counts or a complete
+cost model. The `.ps` hash tables expose their probe and rebuild loops to the
+profiler. Timing excludes parsing and includes program I/O. Measured ratios help
+compare inputs; they do not prove an asymptotic bound.
+
+The default budget is 1,000,000 combined AST evaluations and loop iterations, with
+a maximum user call depth of 256. A limit or runtime error produces a partial
+report and a nonzero exit status. Use `--max-steps` to change the operation budget.
+Run `make test test-analysis` for the unit and command-line tests.
 
 ## Zed Editor Support
 
@@ -134,8 +202,9 @@ pinned in `editors/zed/extension.toml`.
 ## Expressions & Syntax
 
 ### Operators
+
 - `a <- 10` : Assignment (assigns the value `10` to the variable `a`).
-- `+` : Addition 
+- `+` : Addition
 - `-` : Subtraction
 - `*` : Multiplication
 - `/` : Division
@@ -154,6 +223,7 @@ pinned in `editors/zed/extension.toml`.
 ### Control Structures
 
 #### If Statement
+
 - `if condition then expression`
 - `if condition then expression else expression`
 
@@ -167,10 +237,11 @@ else
 ```
 
 #### For Statement
+
 - `for var_name <- start_value to end_value [step value] do expr`
 
 ```pseudo
-for i <- 1 to 10 do 
+for i <- 1 to 10 do
     i <- i + 1
 
 for i <- 1 to 100 step 10 do
@@ -178,6 +249,7 @@ for i <- 1 to 100 step 10 do
 ```
 
 #### While Statement
+
 - `while condition do expr`
 
 ```pseudo
@@ -189,6 +261,7 @@ while i < 100 and i > 10 do
 Loops support `break` and `continue`.
 
 #### Repeat Statement
+
 - `repeat expr until condition`
 
 ```pseudo
@@ -239,57 +312,57 @@ You can instantiate a struct by calling its name like a function, passing the ne
 Algorithm main():
     l <- List(1, 2)
     print(l.head)
-    
+
     l.set_head(10)
     print(l.get_head())
-    
+
     l.test()
 ```
 
 ## Language Formal Grammar
 
 - **`statement`** :
-    - `NEWLINE* expr (NEWLINE TAB_correct_amount expr)* NEWLINE`
-    - `SEMICOLON* expr (SEMICOLON expr)* SEMICOLON`
+  - `NEWLINE* expr (NEWLINE TAB_correct_amount expr)* NEWLINE`
+  - `SEMICOLON* expr (SEMICOLON expr)* SEMICOLON`
 
 - **`expr`** :
-    - `comp-expr ((and|or) comp-expr)*`
+  - `comp-expr ((and|or) comp-expr)*`
 - **`comp-expr`** :
-    - `not comp-expr`
-    - `arith-expr ((EQUAL|NEQ|LESS|GREATER|LEQ|GEQ) arith-expr)*`
+  - `not comp-expr`
+  - `arith-expr ((EQUAL|NEQ|LESS|GREATER|LEQ|GEQ) arith-expr)*`
 - **`arith-expr`** :
-    - `term ((ADD|SUB) term)*`
+  - `term ((ADD|SUB) term)*`
 - **`term`** :
-    - `factor ((MUL|DIV|MOD) factor)*`
+  - `factor ((MUL|DIV|MOD) factor)*`
 - **`factor`** :
-    - `(ADD|SUB) factor`
-    - `power`
+  - `(ADD|SUB) factor`
+  - `power`
 - **`power`** :
-    - `call (POW factor)*`
+  - `call (POW factor)*`
 - **`call`** :
-    - `atom (LEFT_PAREN expr (COMMA expr)* RIGHT_PAREN)?`
-    - `array-access`
+  - `atom (LEFT_PAREN expr (COMMA expr)* RIGHT_PAREN)?`
+  - `array-access`
 - **`atom`** :
-    - `INT | FLOAT | STRING`
-    - `IDENTIFIER (ASSIGN expr)?`
-    - `LEFT_PAREN expr RIGHT_PAREN`
-    - `array-expr`
-    - `if-expr`
-    - `for-expr`
-    - `while-expr`
-    - `repeat-expr`
-    - `algo-def`
+  - `INT | FLOAT | STRING`
+  - `IDENTIFIER (ASSIGN expr)?`
+  - `LEFT_PAREN expr RIGHT_PAREN`
+  - `array-expr`
+  - `if-expr`
+  - `for-expr`
+  - `while-expr`
+  - `repeat-expr`
+  - `algo-def`
 - **`array-access`** :
-    - `atom LEFT_SQUARE expr RIGHT_SQUARE`
+  - `atom LEFT_SQUARE expr RIGHT_SQUARE`
 - **`array-expr`** :
-    - `LEFT_BRACE (expr (COMMA expr)*)? RIGHT_BRACE`
+  - `LEFT_BRACE (expr (COMMA expr)*)? RIGHT_BRACE`
 - **`if-expr`** :
-    - `if expr then expr (else (if-expr|expr))?`
+  - `if expr then expr (else (if-expr|expr))?`
 - **`for-expr`** :
-    - `for IDENTIFIER ASSIGN expr to expr (step)? expr do expr`    
+  - `for IDENTIFIER ASSIGN expr to expr (step)? expr do expr`
 - **`while-expr`** :
-    - `while expr do expr`
+  - `while expr do expr`
 - **`repeat-expr`** :
-    - `repeat expr until expr`
+  - `repeat expr until expr`
 - **`algo-def`** :
-    - `Algorithm IDENTIFIER? LEFT_PAREN (IDENTIFIER (COMMA IDENTIFIER)*)? RIGHT_PAREN COLON expr`
+  - `Algorithm IDENTIFIER? LEFT_PAREN (IDENTIFIER (COMMA IDENTIFIER)*)? RIGHT_PAREN COLON expr`

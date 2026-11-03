@@ -3,6 +3,7 @@
 #include <chrono>
 #include "pseudo.h"
 #include "color.h"
+#include "analysis_cli.h"
 
 using time_point = std::chrono::steady_clock::time_point;
 
@@ -31,6 +32,7 @@ void run_code(std::string file_name, char *args[]) {
 }
 
 int main(int argc, char *args[]) {
+    if (argc > 1 && args[1][0] == '-') return run_analysis_cli(argc, args);
     if(argc == 1) {
         run_shell("stdin");
     } else {

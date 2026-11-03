@@ -374,12 +374,15 @@ std::shared_ptr<Node> Parser::repeat_expr(int tab_expect) {
 std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
     // algorithm -> Algorithm name? (args?) : block
     std::shared_ptr<Token> algo_name = current_tok;
-    if (current_tok->get_type() == TOKEN_IDENTIFIER) {
+    // Built-in names are also valid user method names, e.g. table.clear().
+    if (current_tok->get_type() == TOKEN_IDENTIFIER ||
+        current_tok->get_type() == TOKEN_BUILTIN_ALGO) {
         advance();
         if (current_tok->get_type() == TOKEN_SCOPE_RES) {
             std::shared_ptr<Token> struct_name = algo_name;
             advance();
             if (current_tok->get_type() != TOKEN_IDENTIFIER &&
+                current_tok->get_type() != TOKEN_BUILTIN_ALGO &&
                 current_tok->get_type() != TOKEN_KEYWORD) {
                 std::string error_msg = "Expected method name after ::";
                 std::shared_ptr<Token> error_token =
@@ -396,7 +399,8 @@ std::shared_ptr<Node> Parser::algo_def(int tab_expect) {
             algo_name = std::make_shared<TypedToken<std::string>>(
                 TOKEN_IDENTIFIER, struct_name->get_pos(), full_name);
             advance();
-        } else if (current_tok->get_type() == TOKEN_IDENTIFIER) {
+        } else if (current_tok->get_type() == TOKEN_IDENTIFIER ||
+                   current_tok->get_type() == TOKEN_BUILTIN_ALGO) {
             // Handle "Algorithm List constructor" where List is struct name and constructor is
             // method name Or generally "Algorithm StructName MethodName" But wait, "constructor" is
             // just identifier. If we are inside struct definition, "Algorithm constructor" is
